@@ -173,10 +173,11 @@ async sub create_droplet ($self, $spec) {
     }
   }
 
+  my $message  = $spec->run_custom_setup   ? "Box created, will now run setup. Your box is: "
+               :                             "Box created, will now unlock.  Your box is: ";
   if ($spec->run_standard_setup or $spec->run_custom_setup) {
     $self->handle_message(
-      "Box created, will now run setup. Your box is: "
-      . $self->_format_droplet($droplet)
+      $message . $self->_format_droplet($droplet)
     );
 
     return await $self->_setup_droplet(
@@ -326,7 +327,10 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
   $self->handle_log([ "result of ssh: %s", Process::Status->new($exitcode)->as_string ]);
 
   if ($exitcode == 0) {
-    $self->handle_message("Box ($droplet->{name}) is now set up!");
+    $self->handle_message(
+      $spec->run_custom_setup ? "Box ($droplet->{name}) is now set up!"
+      : "Box ($droplet->{name}) is ready!"
+    );
     return;
   }
 

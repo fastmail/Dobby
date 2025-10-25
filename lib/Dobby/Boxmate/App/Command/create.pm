@@ -82,7 +82,7 @@ sub execute ($self, $opt, $args) {
     run_custom_setup => $opt->custom_setup,
     setup_switches   => [ @setup_args ],
 
-    ssh_key_id  => $config->ssh_key_id,
+    ($config->has_ssh_key_id ? (ssh_key_id  => $config->ssh_key_id) : ()),
     digitalocean_ssh_key_name => $config->digitalocean_ssh_key_name,
 
     is_default_box   => $opt->make_default,

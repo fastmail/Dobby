@@ -75,7 +75,7 @@ package Dobby::BoxManager::ProvisionRequest {
 
   has run_standard_setup => (is => 'ro', isa => 'Bool', default => 1);
 
-  has ssh_key_id => (is  => 'ro', isa => 'Str', required => 1);
+  has ssh_key_id => (is  => 'ro', isa => 'Str', predicate => 'has_ssh_key_id');
   has digitalocean_ssh_key_name => (is  => 'ro', isa => 'Str', default => 'synergy');
 
   no Moose;
@@ -214,11 +214,14 @@ async sub _get_snapshot_id ($self, $spec) {
 }
 
 sub _get_my_ssh_key_file ($self, $spec) {
-  my $key_file = $spec->ssh_key_id
-               ? path($spec->ssh_key_id)->absolute("$ENV{HOME}/.ssh/")
-               : undef;
+  # If we don't have a key id specified, we'll just let ssh pick.  We need this
+  # for agents like Secretive, which don't expose the privkey as a file that
+  # can be specified with ssh's -i argument.
+  return undef unless $spec->has_ssh_key_id;
 
-  unless ($key_file && -r $key_file) {
+  my $key_file = path($spec->ssh_key_id)->absolute("$ENV{HOME}/.ssh/");
+
+  unless (-r $key_file) {
     $self->handle_log(["Cannot read SSH key for inabox setup (from %s)", $spec->ssh_key_id]);
     $self->handle_error(
       "No SSH credentials for running box setup. This is a problem - aborting."
@@ -300,7 +303,7 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
   my @ssh_command = (
     "ssh",
       '-A',
-      '-i', "$key_file",
+      (defined $key_file ? ('-i', "$key_file") : ()),
       '-l', 'root',
       '-o', 'UserKnownHostsFile=/dev/null',
       '-o', 'StrictHostKeyChecking=no',

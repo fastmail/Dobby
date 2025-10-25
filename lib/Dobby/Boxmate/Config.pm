@@ -8,7 +8,7 @@ use Path::Tiny ();
 
 # Dobby::BoxManager config:
 has box_domain => (is => 'ro', isa => 'Str', default => 'fastmailvm.com');
-has ssh_key_id => (is => 'ro', isa => 'Str', required => 1);
+has ssh_key_id => (is => 'ro', isa => 'Str', predicate => 'has_ssh_key_id');
 has digitalocean_ssh_key_name => (is  => 'ro', isa => 'Str', required => 1);
 
 # ProvisioningSpec config:
@@ -56,8 +56,8 @@ sub load ($class) {
     );
   }
 
-  unless ($override{ssh_key_id} && $override{digitalocean_ssh_key_name}) {
-    die "~/.boxmate.toml doesn't contain digitalocean_ssh_key_name and ssh_key_id\n";
+  unless ($override{digitalocean_ssh_key_name}) {
+    die "~/.boxmate.toml doesn't contain digitalocean_ssh_key_name\n";
   }
 
   return $class->new(\%override);

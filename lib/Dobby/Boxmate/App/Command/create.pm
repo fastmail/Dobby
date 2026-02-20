@@ -12,9 +12,10 @@ sub usage_desc { '%c create %o LABEL' }
 
 sub opt_spec {
   return (
-    [ 'region=s',     'what region to create the box in' ],
-    [ 'size|s=s',     'DigitalOcean slug for the Droplet size' ],
-    [ 'version|v=s',  'image version to use' ],
+    [ 'region=s',       'what region to create the box in' ],
+    [ 'size|s=s',       'DigitalOcean slug for the Droplet size' ],
+    [ 'version|v=s',    'image version to use' ],
+    [ 'snapshotid=s',   'DigitalOcean snapshot ID to use directly' ],
     [],
     [ 'type' => 'hidden' => {
         default => 'inabox',
@@ -40,6 +41,13 @@ sub validate_args ($self, $opt, $args) {
 
   $args->[0] =~ /\A[a-z0-9]+(?:-[a-z0-9]+)*\z/
     || die "The label needs to be a string of [a-z0-9]+ joined by dashes.\n";
+
+  if (defined $opt->snapshotid) {
+    $opt->snapshotid =~ /\A[0-9]+\z/
+      || die "The snapshot id must be a numeric\n";
+
+    die "You cannot use --snapshotid and --version together\n" if defined $opt->version
+  }
 
   unless (defined $opt->custom_setup) {
     # Okay, this is a bit underhanded, but it's gonna work.  I know the author
@@ -76,9 +84,10 @@ sub execute ($self, $opt, $args) {
     username  => $config->username,
     region    => lc($opt->region // $config->region),
 
-    ($opt->debian ? (run_standard_setup => 0, image_id => 'debian-12-x64')
-    :$opt->docker ? (run_standard_setup => 0, image_id => 'docker-20-04')
-    :               (%INABOX_SPEC)),
+    ($opt->snapshotid        ? (run_standard_setup => 0, image_id => $opt->snapshotid)
+    :$opt->debian            ? (run_standard_setup => 0, image_id => 'debian-12-x64')
+    :$opt->docker            ? (run_standard_setup => 0, image_id => 'docker-20-04')
+    :                          (%INABOX_SPEC)),
 
     run_custom_setup => $opt->custom_setup,
     setup_switches   => [ @setup_args ],

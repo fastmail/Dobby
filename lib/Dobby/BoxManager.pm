@@ -366,7 +366,7 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
     };
   }
 
-  my ($exitcode, $stderr) = await $self->_run_process_streaming(
+  my $exitcode = await $self->_run_process_streaming(
     \@ssh_command,
     $logstream_cb,
   );
@@ -384,48 +384,36 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
     return;
   }
 
-  $self->handle_message(
-    "Something went wrong setting up your box."
-    . (length $strerr ? " stderr output:\n$stderr" : q{})
-  );
+  $self->handle_message("Something went wrong setting up your box.");
 
   return;
 }
 
 # Run $command as a subprocess, calling $line_cb->($line) for each complete
-# line of stdout as it arrives.  Returns ($exitcode, $stderr_text); if
-# stream_stderr is true, stderr is forwarded to STDERR instead of captured.
+# line of stdout as it arrives.  Returns ($exitcode)
+#
+# This provides the same callback for stdout and stderr, effectively merging
+# their streams, even though those could be desynchronized.  We expect that the
+# programs that will be run will be setting fd 2 == fd 1, making this a
+# non-issue, but it can't be guaranteed.  No option seemed like a good option,
+# so I went with the one with the least code. -- rjbs, 2026-02-21
 async sub _run_process_streaming ($self, $command, $line_cb, %opts) {
   my $partial = '';
-  my $stderr  = '';
   my $exit_future = $self->dobby->loop->new_future;
 
-  my $stderr_handler;
-  if ($opts{stream_stderr}) {
-    my $cb = sub ($stream, $buffref, $eof) {
-      print STDERR $$buffref;
-      $$buffref = '';
-      return 0;
-    };
-
-    $stderr_handler = { on_read => $cb };
-  } else {
-    $stderr_handler = { into => \$stderr };
-  }
+  my $reader = sub ($stream, $buffref, $eof) {
+    $partial .= $$buffref;
+    $$buffref = '';
+    while ($partial =~ s/\A([^\n]*\n)//) {
+      $line_cb->($1);
+    }
+    return 0;
+  };
 
   my $process = IO::Async::Process->new(
     command => $command,
-    stdout  => {
-      on_read => sub ($stream, $buffref, $eof) {
-        $partial .= $$buffref;
-        $$buffref = '';
-        while ($partial =~ s/\A([^\n]*\n)//) {
-          $line_cb->($1);
-        }
-        return 0;
-      },
-    },
-    stderr => $stderr_handler,
+    stdout  => { on_read => $reader },
+    stderr  => { on_read => $reader },
     on_finish => sub ($proc, $exitcode) { $exit_future->done($exitcode) },
   );
 
@@ -437,7 +425,7 @@ async sub _run_process_streaming ($self, $command, $line_cb, %opts) {
   # trailing newline.
   $line_cb->($partial) if length $partial;
 
-  return ($exitcode, $stderr);
+  return $exitcode;
 }
 
 async sub find_and_destroy_droplet ($self, $arg) {

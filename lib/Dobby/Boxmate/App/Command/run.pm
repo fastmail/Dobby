@@ -59,11 +59,7 @@ sub execute ($self, $opt, $args) {
     ? Dobby::Boxmate::LogStream->new_logstream_cb({ loop => $boxman->dobby->loop })
     : sub ($line, @) { print $line if defined $line };
 
-  my ($exitcode) = $boxman->_run_process_streaming(
-    \@ssh_cmd,
-    $cb,
-    stream_stderr => 1
-  )->get;
+  my ($exitcode) = $boxman->_run_process_streaming(\@ssh_cmd, $cb)->get;
 
   $cb->(undef, $exitcode == 0 ? 1 : 0);
 

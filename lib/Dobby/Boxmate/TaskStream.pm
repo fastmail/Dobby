@@ -5,6 +5,14 @@ use v5.36.0;
 use utf8;
 
 use Time::Duration ();
+
+my $WARNING   = "\x{26a0}\x{fe0f}";
+my $CROSS     = "\x{274c}";
+my $WEIRD     = "\x{2049}\x{fe0f}";
+my $HOURGLASS = "\x{23f3}";
+my $CHECK     = "\x{2705}";
+my $STAR      = "\x{2734}\x{fe0f}";
+
 my sub _fmt_dur ($secs) {
   Time::Duration::concise(
     Time::Duration::duration($secs, 3)
@@ -129,17 +137,17 @@ package Dobby::Boxmate::TaskStream::NoTask {
     }
 
     if ($line =~ /\ATASK::ERROR::(.+)\Z/) {
-      say "\N{CROSS MARK} $1";
+      say "$CROSS $1";
       return $self;
     }
 
     if ($line =~ /\ATASK::FINISH\Z/) {
-      say "\x{2049}\x{fe0f} Unexpected task completion event";
+      say "$WEIRD Unexpected task completion event";
       return $self;
     }
 
     if ($self->{prelude_permitted}) {
-      say "\x{26a0}\x{fe0f} Now receiving streamed logs...";
+      say "$WARNING Now receiving streamed logs...";
       $self->{prelude_permitted} = 0;
     }
 
@@ -148,7 +156,7 @@ package Dobby::Boxmate::TaskStream::NoTask {
   }
 
   sub on_eos ($self, $success) {
-    say "\N{CROSS MARK} Failed: process failure" unless $success;
+    say "$CROSS Failed: process failure" unless $success;
   }
 }
 
@@ -170,10 +178,10 @@ package Dobby::Boxmate::TaskStream::InTask {
     bless $self, $class;
 
     if ($self->{animated}) {
-      print "\N{HOURGLASS WITH FLOWING SAND} Currently: $self->{name} (0s)";
+      print "$HOURGLASS Currently: $self->{name} (0s)";
       $self->_start_timer;
     } else {
-      say "\N{HOURGLASS WITH FLOWING SAND} Currently: $self->{name}";
+      say "$HOURGLASS Currently: $self->{name}";
     }
 
     return $self;
@@ -185,7 +193,7 @@ package Dobby::Boxmate::TaskStream::InTask {
       interval => 1,
       on_tick  => sub {
         my $dur = _fmt_dur(time - $self->{start});
-        print "\r\e[K\N{HOURGLASS WITH FLOWING SAND} Currently: $self->{name} ($dur)";
+        print "\r\e[K$HOURGLASS Currently: $self->{name} ($dur)";
       },
     );
     $self->{loop}->add($self->{timer});
@@ -201,7 +209,7 @@ package Dobby::Boxmate::TaskStream::InTask {
 
   sub _do_finish ($self) {
     my $dur    = _fmt_dur(time - $self->{start});
-    my $mark   = $self->{had_error} ? "\x{2734}\x{fe0f}" : "\N{WHITE HEAVY CHECK MARK}";
+    my $mark   = $self->{had_error} ? $STAR : $CHECK;
     my $suffix = $self->{had_error} ? ' with errors' : '';
     $self->_cancel_timer;
     $self->_clear_line;
@@ -216,18 +224,18 @@ package Dobby::Boxmate::TaskStream::InTask {
       print $indented;
     }
 
-    say "    \N{CROSS MARK} $message";
+    say "    $CROSS $message";
 
     $self->{buffer}    = '';
     $self->{had_error} = 1;
 
     if ($self->{animated}) {
       my $dur = _fmt_dur(time - $self->{start});
-      print "\N{HOURGLASS WITH FLOWING SAND} Currently: $self->{name} ($dur)";
+      print "$HOURGLASS Currently: $self->{name} ($dur)";
       return;
     }
 
-    say "\N{HOURGLASS WITH FLOWING SAND} Currently: $self->{name}";
+    say "$HOURGLASS Currently: $self->{name}";
   }
 
   sub on_line ($self, $line) {
@@ -257,7 +265,7 @@ package Dobby::Boxmate::TaskStream::InTask {
       $self->_cancel_timer;
       $self->_clear_line;
       print $self->{buffer} if length $self->{buffer};
-      say "\N{CROSS MARK} Failed: $self->{name}";
+      say "$CROSS Failed: $self->{name}";
     }
   }
 }

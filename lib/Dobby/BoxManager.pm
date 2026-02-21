@@ -7,6 +7,7 @@ use utf8;
 use Carp ();
 use Dobby::Client;
 use Future::AsyncAwait;
+use IO::Async::Process;
 use Path::Tiny;
 use Process::Status;
 
@@ -353,6 +354,54 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
   }
 
   return;
+}
+
+# Run $command as a subprocess, calling $line_cb->($line) for each complete
+# line of stdout as it arrives.  Returns ($exitcode, $stderr_text); if
+# stream_stderr is true, stderr is forwarded to STDERR instead of captured.
+async sub _run_process_streaming ($self, $command, $line_cb, %opts) {
+  my $partial = '';
+  my $stderr  = '';
+  my $exit_future = $self->dobby->loop->new_future;
+
+  my $stderr_handler;
+  if ($opts{stream_stderr}) {
+    my $cb = sub ($stream, $buffref, $eof) {
+      print STDERR $$buffref;
+      $$buffref = '';
+      return 0;
+    };
+
+    $stderr_handler = { on_read => $cb };
+  } else {
+    $stderr_handler = { into => \$stderr };
+  }
+
+  my $process = IO::Async::Process->new(
+    command => $command,
+    stdout  => {
+      on_read => sub ($stream, $buffref, $eof) {
+        $partial .= $$buffref;
+        $$buffref = '';
+        while ($partial =~ s/\A([^\n]*\n)//) {
+          $line_cb->($1);
+        }
+        return 0;
+      },
+    },
+    stderr => $stderr_handler,
+    on_finish => sub ($proc, $exitcode) { $exit_future->done($exitcode) },
+  );
+
+  $self->dobby->loop->add($process);
+
+  my $exitcode = await $exit_future;
+
+  # Flush any partial line left over when the process exited without a
+  # trailing newline.
+  $line_cb->($partial) if length $partial;
+
+  return ($exitcode, $stderr);
 }
 
 async sub find_and_destroy_droplet ($self, $arg) {

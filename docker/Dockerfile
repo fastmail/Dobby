@@ -83,12 +83,3 @@ perl Makefile.PL
 make
 make install
 EOF
-
-RUN <<EOF
-# install Synergy
-git clone https://github.com/Fastmail/Synergy.git
-cd Synergy
-perl Makefile.PL
-make
-make install
-EOF

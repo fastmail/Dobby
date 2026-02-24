@@ -19,7 +19,7 @@ ssh to VMs.  More features may come later.
 
 ### Rik recommends hardcore mode:
 
-1. clone Dobby and Synergy
+1. clone Dobby
 2. install them, in that order, "the usual Perl way", by running
    `cpanm --installdeps . && perl Makefile.PL && make install`
 3. run `box`

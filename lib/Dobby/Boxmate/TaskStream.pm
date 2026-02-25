@@ -4,6 +4,7 @@ package Dobby::Boxmate::TaskStream;
 use v5.36.0;
 use utf8;
 
+use Future;
 use Time::Duration ();
 
 my $WARNING   = "\x{26a0}\x{fe0f}";
@@ -89,11 +90,11 @@ sub new_taskstream_cb ($class, $arg = undef) {
   return sub ($line, $success = undef) {
     unless (defined $line) {
       $state->on_eos($success);
-      return;
+      return Future->done;
     }
 
     $state = $state->on_line($line);
-    return;
+    return Future->done;
   };
 }
 

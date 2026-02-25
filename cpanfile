@@ -6,6 +6,7 @@ requires "App::Cmd::Setup" => "0";
 requires "Carp" => "0";
 requires "DateTime::Format::RFC3339" => "0";
 requires "Defined::KV" => "0";
+requires "Future" => "0";
 requires "Future::AsyncAwait" => "0";
 requires "Future::Utils" => "0";
 requires "IO::Async::Loop" => "0";

@@ -27,9 +27,9 @@ sub boxman ($self, %opts) {
   require IO::Async::Loop;
   require String::Flogger;
 
-  my $token = $ENV{DIGITALOCEAN_TOKEN};
+  my $token = $ENV{DIGITAL_OCEAN_TOKEN} // $ENV{DIGITALOCEAN_TOKEN};
   unless ($token) {
-    die "\$DIGITALOCEAN_TOKEN isn't set. It should contain your API token or an opcli: URI\n";
+    die "\$DIGITAL_OCEAN_TOKEN isn't set. It should contain your API token or an opcli: URI\n";
   }
 
   if ($token =~ m{^opcli:}) {

@@ -25,10 +25,10 @@ ssh to VMs.  More features may come later.
 3. run `box`
 
 For even better value, get your token securely from 1Password by setting your
-`DIGITALOCAEN_TOKEN` environment variable to an `opcli` URI like this:
+`DIGITAL_OCAEN_TOKEN` environment variable to an `opcli` URI like this:
 
 ```
-DIGITALOCEAN_TOKEN=opcli:a=fm:v=Employee:i=xyzzy:f=credential
+DIGITAL_OCEAN_TOKEN=opcli:a=fm:v=Employee:i=xyzzy:f=credential
 ```
 
 (For more information on that see [his blog
@@ -47,7 +47,7 @@ made much slicker, but for now, it should work okay.
 
 You need two things:
 
-1. a `DIGITALOCEAN_TOKEN` environment variable, preferably with an `opcli`
+1. a `DIGITAL_OCEAN_TOKEN` environment variable, preferably with an `opcli`
    entry, but potentially with token
 2. a valid `~/.boxmate.toml`
 

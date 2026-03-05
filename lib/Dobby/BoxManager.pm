@@ -6,6 +6,7 @@ use utf8;
 
 use Carp ();
 use Dobby::Client;
+use List::Util qw(shuffle);
 use Future::AsyncAwait;
 use IO::Async::Process;
 use Path::Tiny;
@@ -88,8 +89,9 @@ package Dobby::BoxManager::ProvisionRequest {
   # things like "what if the user said to run custom setup but not standard
   # setup".  At some point, you'll get weird results if you do weird things.
 
-  has region      => (is => 'ro', isa => 'Str',     required => 1);
-  has size        => (is => 'ro', isa => 'Str',     required => 1);
+  has size_preferences   => (is => 'ro', isa => 'ArrayRef[Str]', required => 1);
+  has region_preferences => (is => 'ro', isa => 'ArrayRef[Str]', default => sub { [] });
+
   has username    => (is => 'ro', isa => 'Str',     required => 1);
   has version     => (is => 'ro', isa => 'Str',     required => 1);
 
@@ -109,6 +111,25 @@ package Dobby::BoxManager::ProvisionRequest {
   has ssh_key_id => (is  => 'ro', isa => 'Str', predicate => 'has_ssh_key_id');
   has digitalocean_ssh_key_name => (is  => 'ro', isa => 'Str', default => 'synergy');
 
+  # When true, region beats size in preference resolution: useful for
+  # interactive use where latency matters more than cost control.
+  # -- claude, 2026-03-05
+  has prefer_proximity => (is => 'ro', isa => 'Bool', default => 0);
+
+  sub BUILDARGS ($class, @rest) {
+    my %args = @rest == 1 ? $rest[0]->%* : @rest;
+
+    Carp::confess("ProvisionRequest: provide exactly one of 'size' or 'size_preferences'")
+      unless exists $args{size} xor exists $args{size_preferences};
+    $args{size_preferences} = [ delete $args{size} ] if exists $args{size};
+
+    Carp::confess("ProvisionRequest: provide at most one of 'region' or 'region_preferences'")
+      if exists $args{region} && exists $args{region_preferences};
+    $args{region_preferences} = [ delete $args{region} ] if exists $args{region};
+
+    return \%args;
+  }
+
   no Moose;
   __PACKAGE__->meta->make_immutable;
 }
@@ -124,14 +145,22 @@ async sub create_droplet ($self, $spec) {
 
   my $name = $self->box_name_for($spec->username, $spec->label);
 
-  my $region = $spec->region;
-  $self->handle_message("Creating $name in \U$region\E, this will take a minute or two.");
-
   # It would be nice to do these in parallel, but in testing that causes
   # *super* strange errors deep down in IO::Async if one of the calls fails and
   # the other does not, so here we'll just admit defeat and do them in
   # sequence. -- michael, 2020-04-02
-  my $snapshot_id = await $self->_get_snapshot_id($spec);
+  my ($snapshot_id, $snapshot);
+  if (defined $spec->image_id) {
+    $snapshot_id = $spec->image_id;
+  } else {
+    $snapshot    = await $self->get_snapshot_for_version($spec->version);
+    $snapshot_id = $snapshot->{id};
+  }
+
+  my ($size, $region) = await $self->_resolve_size_and_region($spec, $snapshot);
+
+  $self->handle_message("Creating $name in \U$region\E, this will take a minute or two.");
+
   my $ssh_key  = await $self->_get_ssh_key($spec);
 
   # We get this early so that we don't bother creating the Droplet if we're not
@@ -140,8 +169,8 @@ async sub create_droplet ($self, $spec) {
 
   my %droplet_create_args = (
     name     => $name,
-    region   => $spec->region,
-    size     => $spec->size,
+    region   => $region,
+    size     => $size,
     image    => $snapshot_id,
     ssh_keys => [ $ssh_key->{id} ],
     tags     => [ "owner:" . $spec->username, $spec->extra_tags->@* ],
@@ -226,22 +255,72 @@ async sub create_droplet ($self, $spec) {
   return;
 }
 
-async sub _get_snapshot_id ($self, $spec) {
-  if (defined $spec->image_id) {
-    return $spec->image_id;
+async sub _resolve_size_and_region ($self, $spec, $snapshot) {
+  my $size_prefs   = $spec->size_preferences;
+  my $region_prefs = $spec->region_preferences;
+
+  my %snap_region;
+  if ($snapshot) {
+    %snap_region = map { $_ => 1 } $snapshot->{regions}->@*;
   }
 
-  my $region = $spec->region;
+  if (@$size_prefs == 1 && @$region_prefs == 1) {
+    my ($size, $region) = ($size_prefs->[0], $region_prefs->[0]);
 
-  my $snapshot = await $self->get_snapshot_for_version($spec->version);
-  my %snapshot_regions = map {; $_ => 1 } $snapshot->{regions}->@*;
+    if ($snapshot && !$snap_region{$region}) {
+      my $region_list = join q{, }, map {; uc } sort $snapshot->{regions}->@*;
+      $self->handle_error(
+        "The snapshot you want ($snapshot->{name}) isn't available in \U$region\E."
+        . "  You could create it in any of these regions: $region_list"
+      );
+    }
 
-  unless ($snapshot_regions{$region}) {
-    my $region_list = join q{, }, map {; uc } sort $snapshot->{regions}->@*;
-    $self->handle_error("The snapshot you want ($snapshot->{name}) isn't available in \U$region\E.  You could create it in any of these regions: $region_list");
+    return ($size, $region);
   }
 
-  return $snapshot->{id};
+  # Multiple preferences: consult the API to find the best combination.  By
+  # default, size is paramount (cost control for batch/CI use).  When
+  # prefer_proximity is set, region wins instead (latency for interactive use).
+  # -- claude, 2026-03-05
+  my $all_sizes = await $self->dobby->json_get_pages_of('/sizes', 'sizes');
+  my %size_regions =
+    map  { $_->{slug} => { map { $_ => 1 } $_->{regions}->@* } }
+    grep { $_->{available} }
+    @$all_sizes;
+
+  # When no region preference is given, build a candidate list from whatever
+  # regions carry the snapshot, or all available regions for a generic image.
+  my @effective_regions;
+  if (@$region_prefs) {
+    @effective_regions = @$region_prefs;
+  } elsif ($snapshot) {
+    @effective_regions = shuffle($snapshot->{regions}->@*);
+  } else {
+    my %seen;
+    @effective_regions = shuffle(grep { !$seen{$_}++ }
+                                 map  { $_->{regions}->@* }
+                                 grep { $_->{available} }
+                                 @$all_sizes);
+  }
+
+  my ($outer, $inner) = $spec->prefer_proximity
+    ? (\@effective_regions, $size_prefs)
+    : ($size_prefs,         \@effective_regions);
+
+  for my $primary (@$outer) {
+    for my $secondary (@$inner) {
+      my ($size_slug, $region_slug) = $spec->prefer_proximity
+        ? ($secondary, $primary)
+        : ($primary, $secondary);
+      next unless ($size_regions{$size_slug} // {})->{$region_slug};
+      next if $snapshot && !$snap_region{$region_slug};
+      return ($size_slug, $region_slug);
+    }
+  }
+
+  $self->handle_error(
+    "No available combination of preferred sizes and regions was found."
+  );
 }
 
 sub _get_my_ssh_key_file ($self, $spec) {

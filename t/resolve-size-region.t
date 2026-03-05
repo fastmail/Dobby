@@ -147,7 +147,6 @@ box_choices_ok(
   'prefer_proximity=1: we pick regionover size',
 );
 
-
 # Snapshot has only sfo, so that is the only candidate region.
 box_choices_ok(
   { size => 'everywhere' },
@@ -156,7 +155,23 @@ box_choices_ok(
   'no region preference: picks from snapshot regions',
 );
 
-# Neither only-sfo nor not-ams are available in ams.
+box_choices_ok(
+  {
+    size_preferences   => [qw(everywhere)],
+    region_preferences => [qw(nyc sfo)],
+  },
+  found_in(qw(sfo)),
+  { size => 'everywhere', region => 'sfo' },
+  "skip first-choice region because of snapshot availability",
+);
+
+box_choices_ok(
+  { size => 'only-sfo' },
+  undef,
+  { size => 'only-sfo', region => 'sfo' },
+  'no region, but size only in one region',
+);
+
 box_choices_fail_ok(
   {
     size_preferences   => [qw(only-sfo not-ams)],
@@ -164,7 +179,7 @@ box_choices_fail_ok(
   },
   found_in(qw(nyc sfo)),
   re(qr/No available combination/),
-  'no matching size/region pair'
+  'nothing satisfies criteria'
 );
 
 done_testing;

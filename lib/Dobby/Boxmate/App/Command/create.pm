@@ -13,7 +13,7 @@ sub usage_desc { '%c create %o LABEL' }
 sub opt_spec {
   return (
     [ 'region=s@',      'region preference; repeat to add fallbacks in order' ],
-    [ 'any-region',     'pick any available region, ignoring region config' ],
+    [ 'any-region!',    "if true, fall back to any region; otherwise, won't" ],
     [ 'size|s=s@',      'size preference; repeat to add fallbacks in order' ],
     [ 'version|v=s',    'image version to use' ],
     [ 'snapshot-id|snapshot=i',
@@ -81,6 +81,12 @@ sub execute ($self, $opt, $args) {
 
   my @setup_args = split /\s+/, ($opt->setup_args // q{});
 
+  # If you passed --any-region or --no-any-region, we respect that.  Otherwise,
+  # we fall back to your config.  The default config is false.
+  my $region_fallback = defined $opt->any_region
+                      ? $opt->any_region
+                      : $config->fallback_to_anywhere;
+
   my $spec = Dobby::BoxManager::ProvisionRequest->new({
     version   => $opt->version // $config->version,
     label     => $label,
@@ -94,7 +100,7 @@ sub execute ($self, $opt, $args) {
           ? (region_preferences => $config->region_preferences)
           : ())),
 
-    ($opt->any_region && $opt->region ? (fallback_to_anywhere => 1) : ()),
+    ($region_fallback ? (fallback_to_anywhere => 1) : ()),
 
     ($opt->snapshot_id  ? (run_standard_setup => 0, image_id => $opt->snapshot_id)
     :$opt->debian       ? (run_standard_setup => 0, image_id => 'debian-12-x64')

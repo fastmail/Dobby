@@ -25,6 +25,11 @@ has region_preferences => (
   predicate => 'has_region_preferences',
 );
 
+has fallback_to_anywhere => (
+  is        => 'ro',
+  isa       => 'Bool',
+);
+
 has username    => (is => 'ro', isa => 'Str', default => $ENV{USER});
 has version     => (is => 'ro', isa => 'Str', default => 'bookworm');
 

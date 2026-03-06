@@ -116,6 +116,10 @@ package Dobby::BoxManager::ProvisionRequest {
   # -- claude, 2026-03-05
   has prefer_proximity => (is => 'ro', isa => 'Bool', default => 0);
 
+  # When true, any region not in region_preferences is tried as a fallback
+  # after preferred regions are exhausted.
+  has fallback_to_anywhere => (is => 'ro', isa => 'Bool', default => 0);
+
   sub BUILDARGS ($class, @rest) {
     my %args = @rest == 1 ? $rest[0]->%* : @rest;
 
@@ -264,7 +268,7 @@ async sub _resolve_size_and_region ($self, $spec, $snapshot) {
     %snap_region = map { $_ => 1 } $snapshot->{regions}->@*;
   }
 
-  if (@$size_prefs == 1 && @$region_prefs == 1) {
+  if (@$size_prefs == 1 && @$region_prefs == 1 && !$spec->fallback_to_anywhere) {
     my ($size, $region) = ($size_prefs->[0], $region_prefs->[0]);
 
     if ($snapshot && !$snap_region{$region}) {
@@ -301,6 +305,18 @@ async sub _resolve_size_and_region ($self, $spec, $snapshot) {
                                  map  { $_->{regions}->@* }
                                  grep { $_->{available} }
                                  @$all_sizes);
+  }
+
+  # When falling back to anywhere, append all available regions not already
+  # in the preference list, shuffled, as lower-priority candidates.
+  if ($spec->fallback_to_anywhere) {
+    my %preferred = map { $_ => 1 } @effective_regions;
+    my %seen;
+    push @effective_regions,
+      shuffle(grep { !$preferred{$_} && !$seen{$_}++ }
+              map  { $_->{regions}->@* }
+              grep { $_->{available} }
+              @$all_sizes);
   }
 
   my ($outer, $inner) = $spec->prefer_proximity

@@ -18,6 +18,7 @@ sub opt_spec {
     [ 'min-disk=i',             'minimum disk size in GB' ],
     [ 'min-cpu=i',              'minimum number of vCPUs' ],
     [ 'min-ram=i',              'minimum RAM in GB' ],
+    [ 'from-config',            'apply size/region preferences from ~/.boxmate.toml' ],
     [],
     [ 'type' => 'hidden' => {
         default => 'inabox',
@@ -64,6 +65,13 @@ sub execute ($self, $opt, $args) {
 
   my $candidate_set = $boxman->find_provisioning_candidates(
     snapshot  => $snapshot,
+    ($opt->from_config ? (
+      size_preferences => $config->size_preferences,
+      ($config->has_region_preferences
+        ? (region_preferences => $config->region_preferences) : ()),
+      ($config->fallback_to_anywhere
+        ? (fallback_to_anywhere => 1)                         : ()),
+    ) : ()),
     (defined $opt->price    ? (max_price => $opt->price * 2.0,
                                min_price => $opt->price * 0.5) : ()),
     (defined $opt->min_disk ? (min_disk  => $opt->min_disk)    : ()),

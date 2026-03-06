@@ -46,10 +46,6 @@ sub validate_args ($self, $opt, $args) {
   $args->[0] =~ /\A[a-z0-9]+(?:-[a-z0-9]+)*\z/
     || die "The label needs to be a string of [a-z0-9]+ joined by dashes.\n";
 
-  if ($opt->any_region && $opt->region) {
-    die "You can't use --any-region and --region together.\n";
-  }
-
   if (defined $opt->snapshot_id) {
     $opt->snapshot_id =~ /\A[0-9]+\z/
       || die "The snapshot id must be a numeric\n";
@@ -97,6 +93,8 @@ sub execute ($self, $opt, $args) {
       : ($config->has_region_preferences && ! $opt->any_region
           ? (region_preferences => $config->region_preferences)
           : ())),
+
+    ($opt->any_region && $opt->region ? (fallback_to_anywhere => 1) : ()),
 
     ($opt->snapshot_id  ? (run_standard_setup => 0, image_id => $opt->snapshot_id)
     :$opt->debian       ? (run_standard_setup => 0, image_id => 'debian-12-x64')

@@ -182,4 +182,16 @@ box_choices_fail_ok(
   'nothing satisfies criteria'
 );
 
+# only-sfo is not in ams, but fallback_to_anywhere lets it land in sfo.
+box_choices_ok(
+  {
+    size_preferences     => [qw(only-sfo)],
+    region_preferences   => [qw(ams)],
+    fallback_to_anywhere => 1,
+  },
+  found_in(qw(ams sfo)),
+  { size => 'only-sfo', region => 'sfo' },
+  'fallback_to_anywhere: preferred region misses, falls through to any region',
+);
+
 done_testing;

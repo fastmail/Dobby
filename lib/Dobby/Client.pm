@@ -37,7 +37,7 @@ sub api_base {
 
 sub bearer_token { $_[0]{__dobby_bearer_token} }
 
-sub http ($self) {
+sub _http ($self) {
   return $self->{__dobby_http} //= do {
     my $http = Net::Async::HTTP->new(
       user_agent => 'Dobby/0',
@@ -50,10 +50,14 @@ sub http ($self) {
   };
 }
 
+sub _do_request ($self, @rest) {
+  $self->_http->do_request(@rest);
+}
+
 async sub json_get ($self, $path, $arg=undef) {
   my $undef_if_404 = $arg && $arg->{undef_if_404};
 
-  my $res = await $self->http->do_request(
+  my $res = await $self->_do_request(
     method => 'GET',
     uri    => $self->api_base . $path,
     headers => {
@@ -79,7 +83,7 @@ async sub json_get_pages_of ($self, $path, $key) {
   my @items;
 
   while ($url) {
-    my $res = await $self->http->do_request(
+    my $res = await $self->_do_request(
       method => 'GET',
       uri    => $url,
       headers => {
@@ -105,7 +109,7 @@ async sub json_get_pages_of ($self, $path, $key) {
 }
 
 async sub _json_req_with_body ($self, $method, $path, $payload) {
-  my $res = await $self->http->do_request(
+  my $res = await $self->_do_request(
     method => $method,
     uri    => $self->api_base . $path,
     headers => {
@@ -133,7 +137,7 @@ async sub json_put ($self, $path, $payload) {
 }
 
 async sub delete_url ($self, $path) {
-  my $res = await $self->http->do_request(
+  my $res = await $self->_do_request(
     method => 'DELETE',
     uri    => $self->api_base . $path,
     headers => {

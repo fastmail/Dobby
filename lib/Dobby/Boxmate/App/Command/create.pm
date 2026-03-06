@@ -12,8 +12,9 @@ sub usage_desc { '%c create %o LABEL' }
 
 sub opt_spec {
   return (
-    [ 'region=s',       'what region to create the box in' ],
-    [ 'size|s=s',       'DigitalOcean slug for the Droplet size' ],
+    [ 'region=s@',      'region preference; repeat to add fallbacks in order' ],
+    [ 'any-region!',    "if true, fall back to any region; otherwise, won't" ],
+    [ 'size|s=s@',      'size preference; repeat to add fallbacks in order' ],
     [ 'version|v=s',    'image version to use' ],
     [ 'snapshot-id|snapshot=i',
                         'DigitalOcean snapshot to use (numeric id)' ],
@@ -22,7 +23,9 @@ sub opt_spec {
         default => 'inabox',
         one_of  => [
           [ 'inabox',       "create a Fastmail-in-a-box (default behavior)" ],
-          [ 'debian',       "don't make a Fastmail-in-a-box, just Debian" ],
+          [ 'debian',       "don't make a Fastmail-in-a-box, just some Debian" ],
+          [ 'bookworm',     "don't make a Fastmail-in-a-box, just Debian 12" ],
+          [ 'trixie',       "don't make a Fastmail-in-a-box, just Debian 13" ],
           [ 'docker',       "don't make a Fastmail-in-a-box, just Docker" ],
         ]
       }
@@ -78,15 +81,31 @@ sub execute ($self, $opt, $args) {
 
   my @setup_args = split /\s+/, ($opt->setup_args // q{});
 
+  # If you passed --any-region or --no-any-region, we respect that.  Otherwise,
+  # we fall back to your config.  The default config is false.
+  my $region_fallback = defined $opt->any_region
+                      ? $opt->any_region
+                      : $config->fallback_to_anywhere;
+
   my $spec = Dobby::BoxManager::ProvisionRequest->new({
     version   => $opt->version // $config->version,
     label     => $label,
-    size      => $opt->size // $config->size,
     username  => $config->username,
-    region    => lc($opt->region // $config->region),
+
+    size_preferences => ($opt->size ? $opt->size : $config->size_preferences),
+
+    ($opt->region
+      ? (region_preferences => [ map { lc } $opt->region->@* ])
+      : ($config->has_region_preferences && ! $opt->any_region
+          ? (region_preferences => $config->region_preferences)
+          : ())),
+
+    ($region_fallback ? (fallback_to_anywhere => 1) : ()),
 
     ($opt->snapshot_id  ? (run_standard_setup => 0, image_id => $opt->snapshot_id)
     :$opt->debian       ? (run_standard_setup => 0, image_id => 'debian-12-x64')
+    :$opt->bookworm     ? (run_standard_setup => 0, image_id => 'debian-12-x64')
+    :$opt->trixie       ? (run_standard_setup => 0, image_id => 'debian-13-x64')
     :$opt->docker       ? (run_standard_setup => 0, image_id => 'docker-20-04')
     :                     (%INABOX_SPEC)),
 

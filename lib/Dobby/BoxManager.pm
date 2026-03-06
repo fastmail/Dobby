@@ -6,7 +6,6 @@ use utf8;
 
 use Carp ();
 use Dobby::Client;
-use List::Util qw(shuffle);
 use Future::AsyncAwait;
 use IO::Async::Process;
 use Path::Tiny;
@@ -138,6 +137,78 @@ package Dobby::BoxManager::ProvisionRequest {
   __PACKAGE__->meta->make_immutable;
 }
 
+package Dobby::BoxManager::CandidateSet {
+  use Moose;
+
+  # Each candidate is a hashref with: size, region, price_hourly, vcpus,
+  # memory, disk, description.  One entry per (size, region) pair.
+  has candidates => (
+    isa     => 'ArrayRef[HashRef]',
+    default => sub { [] },
+    traits  => [ 'Array' ],
+    handles => {
+      candidates => 'elements',
+      is_empty   => 'is_empty',
+    },
+  );
+
+  has size_preferences => (
+    isa     => 'ArrayRef[Str]',
+    default => sub { [] },
+    traits  => [ 'Array' ],
+    handles => { size_preferences => 'elements' },
+  );
+
+  has region_preferences => (
+    isa     => 'ArrayRef[Str]',
+    default => sub { [] },
+    traits  => [ 'Array' ],
+    handles => { region_preferences => 'elements' },
+  );
+
+  has prefer_proximity => (
+    is      => 'ro',
+    isa     => 'Bool',
+    default => 0,
+  );
+
+  # Returns the single best candidate according to preference ordering and
+  # price, with random tie-breaking.
+  #
+  # When size_preferences is given (and prefer_proximity is false), preference
+  # rank is the primary sort key; price is secondary.  When prefer_proximity is
+  # true, region_preferences rank is primary instead.  When no preferences are
+  # given, price alone determines the winner.  Ties (same rank and same price)
+  # are broken randomly. -- claude, 2026-03-06
+  sub pick_one ($self) {
+    return undef if $self->is_empty;
+
+    my @size_prefs   = $self->size_preferences;
+    my @region_prefs = $self->region_preferences;
+
+    my %size_rank   = map { $size_prefs[$_]   => $_ } 0 .. $#size_prefs;
+    my %region_rank = map { $region_prefs[$_] => $_ } 0 .. $#region_prefs;
+
+    my ($pick) =
+      map  { $_->[0] }
+      sort { $a->[1] <=> $b->[1] || $a->[2] <=> $b->[2] || $a->[3] <=> $b->[3] }
+      map  {[
+        $_,
+        ($self->prefer_proximity
+          ? ($region_rank{$_->{region}} // scalar @region_prefs)
+          : ($size_rank{$_->{size}}     // scalar @size_prefs)),
+        $_->{price_hourly} // 0,
+        rand,
+      ]}
+      $self->candidates;
+
+    return $pick;
+  }
+
+  no Moose;
+  __PACKAGE__->meta->make_immutable;
+}
+
 async sub create_droplet ($self, $spec) {
   my $maybe_droplet = await $self->_get_droplet_for($spec->username, $spec->label);
 
@@ -259,84 +330,89 @@ async sub create_droplet ($self, $spec) {
   return;
 }
 
-async sub _resolve_size_and_region ($self, $spec, $snapshot) {
-  my $size_prefs   = $spec->size_preferences;
-  my $region_prefs = $spec->region_preferences;
+async sub find_provisioning_candidates ($self, %args) {
+  my $snapshot         = $args{snapshot};
+  my $size_prefs       = $args{size_preferences}   // [];
+  my $region_prefs     = $args{region_preferences} // [];
+  my $fallback         = $args{fallback_to_anywhere};
+  my $prefer_proximity = $args{prefer_proximity}   // 0;
+  my $max_price        = $args{max_price};
+  my $min_price        = $args{min_price};
+  my $min_cpu          = $args{min_cpu};
+  my $min_disk         = $args{min_disk};
+  my $min_ram          = $args{min_ram};    # in GB; API stores memory in MB
+
+  my %want_size   = map { $_ => 1 } @$size_prefs;
+  my %want_region = map { $_ => 1 } @$region_prefs;
 
   my %snap_region;
   if ($snapshot) {
     %snap_region = map { $_ => 1 } $snapshot->{regions}->@*;
   }
 
-  if (@$size_prefs == 1 && @$region_prefs == 1 && !$spec->fallback_to_anywhere) {
-    my ($size, $region) = ($size_prefs->[0], $region_prefs->[0]);
-
-    if ($snapshot && !$snap_region{$region}) {
-      my $region_list = join q{, }, map {; uc } sort $snapshot->{regions}->@*;
-      $self->handle_error(
-        "The snapshot you want ($snapshot->{name}) isn't available in \U$region\E."
-        . "  You could create it in any of these regions: $region_list"
-      );
-    }
-
-    return ($size, $region);
-  }
-
-  # Multiple preferences: consult the API to find the best combination.  By
-  # default, size is paramount (cost control for batch/CI use).  When
-  # prefer_proximity is set, region wins instead (latency for interactive use).
-  # -- claude, 2026-03-05
   my $all_sizes = await $self->dobby->json_get_pages_of('/sizes', 'sizes');
-  my %size_regions =
-    map  { $_->{slug} => { map { $_ => 1 } $_->{regions}->@* } }
-    grep { $_->{available} }
+
+  my @filtered_sizes =
+    grep { $_->{available}                                                     }
+    grep { !@$size_prefs       || $want_size{$_->{slug}}                       }
+    grep { !defined $max_price || $_->{price_hourly} <= $max_price             }
+    grep { !defined $min_price || $_->{price_hourly} >= $min_price             }
+    grep { !defined $min_cpu   || $_->{vcpus}        >= $min_cpu               }
+    grep { !defined $min_disk  || $_->{disk}         >= $min_disk              }
+    grep { !defined $min_ram   || $_->{memory}       >= $min_ram * 1024        }
     @$all_sizes;
 
-  # When no region preference is given, build a candidate list from whatever
-  # regions carry the snapshot, or all available regions for a generic image.
-  my @effective_regions;
-  if (@$region_prefs) {
-    @effective_regions = @$region_prefs;
-  } elsif ($snapshot) {
-    @effective_regions = shuffle($snapshot->{regions}->@*);
-  } else {
-    my %seen;
-    @effective_regions = shuffle(grep { !$seen{$_}++ }
-                                 map  { $_->{regions}->@* }
-                                 grep { $_->{available} }
-                                 @$all_sizes);
-  }
+  my @candidates;
+  for my $size (@filtered_sizes) {
+    my @valid_regions = $size->{regions}->@*;
 
-  # When falling back to anywhere, append all available regions not already
-  # in the preference list, shuffled, as lower-priority candidates.
-  if ($spec->fallback_to_anywhere) {
-    my %preferred = map { $_ => 1 } @effective_regions;
-    my %seen;
-    push @effective_regions,
-      shuffle(grep { !$preferred{$_} && !$seen{$_}++ }
-              map  { $_->{regions}->@* }
-              grep { $_->{available} }
-              @$all_sizes);
-  }
+    @valid_regions = grep { $snap_region{$_} } @valid_regions if $snapshot;
 
-  my ($outer, $inner) = $spec->prefer_proximity
-    ? (\@effective_regions, $size_prefs)
-    : ($size_prefs,         \@effective_regions);
+    # When region_preferences are given and fallback is off, restrict to only
+    # preferred regions.  With fallback on, all valid regions are candidates
+    # (the preference ordering only affects pick_one, not filtering).
+    if (@$region_prefs && !$fallback) {
+      @valid_regions = grep { $want_region{$_} } @valid_regions;
+    }
 
-  for my $primary (@$outer) {
-    for my $secondary (@$inner) {
-      my ($size_slug, $region_slug) = $spec->prefer_proximity
-        ? ($secondary, $primary)
-        : ($primary, $secondary);
-      next unless ($size_regions{$size_slug} // {})->{$region_slug};
-      next if $snapshot && !$snap_region{$region_slug};
-      return ($size_slug, $region_slug);
+    for my $region (@valid_regions) {
+      push @candidates, {
+        size         => $size->{slug},
+        region       => $region,
+        price_hourly => $size->{price_hourly},
+        vcpus        => $size->{vcpus},
+        memory       => $size->{memory},
+        disk         => $size->{disk},
+        description  => $size->{description},
+      };
     }
   }
 
-  $self->handle_error(
-    "No available combination of preferred sizes and regions was found."
+  return Dobby::BoxManager::CandidateSet->new(
+    candidates         => \@candidates,
+    size_preferences   => $size_prefs,
+    region_preferences => $region_prefs,
+    prefer_proximity   => $prefer_proximity,
   );
+}
+
+async sub _resolve_size_and_region ($self, $spec, $snapshot) {
+  my $candidates = await $self->find_provisioning_candidates(
+    snapshot             => $snapshot,
+    size_preferences     => $spec->size_preferences,
+    region_preferences   => $spec->region_preferences,
+    fallback_to_anywhere => $spec->fallback_to_anywhere,
+    prefer_proximity     => $spec->prefer_proximity,
+  );
+
+  if ($candidates->is_empty) {
+    $self->handle_error(
+      "No available combination of preferred sizes and regions was found."
+    );
+  }
+
+  my $pick = $candidates->pick_one;
+  return ($pick->{size}, $pick->{region});
 }
 
 sub _get_my_ssh_key_file ($self, $spec) {

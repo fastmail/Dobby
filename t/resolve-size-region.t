@@ -88,7 +88,7 @@ box_choices_ok(
 box_choices_fail_ok(
   { size => 'everywhere', region => 'nyc' },
   found_in(qw(sfo)),
-  all( re(qr/isn't available in NYC/), re(qr/SFO/) ),
+  re(qr/No available combination/),
   "single option, not available",
 );
 

@@ -80,11 +80,12 @@ sub execute ($self, $opt, $args) {
   )->get;
 
   my @all_candidates = $candidate_set->candidates;
+  my @excluded       = $candidate_set->region_excluded_candidates;
 
   # One display row per unique size slug; use the first candidate seen for
   # the size's metadata (all candidates for a slug share the same metadata).
   my %size_meta;
-  for my $c (@all_candidates) {
+  for my $c (@all_candidates, @excluded) {
     $size_meta{$c->{size}} //= $c;
   }
 
@@ -95,12 +96,11 @@ sub execute ($self, $opt, $args) {
   my %seen_region;
   my @sorted_regions = sort grep { !$seen_region{$_}++ }
                        map  { $_->{region} }
-                       @all_candidates;
+                       (@all_candidates, @excluded);
 
-  my %valid;
-  for my $c (@all_candidates) {
-    $valid{$c->{size}}{$c->{region}} = 1;
-  }
+  my (%valid, %region_excluded);
+  for my $c (@all_candidates) { $valid{$c->{size}}{$c->{region}}           = 1 }
+  for my $c (@excluded)       { $region_excluded{$c->{size}}{$c->{region}} = 1 }
 
   require Text::Table;
   require Term::ANSIColor;
@@ -122,7 +122,11 @@ sub execute ($self, $opt, $args) {
             ? ($size->{memory} / 1024) . 'G'
             : $size->{memory} . 'M';
 
-    my @region_cells = map { $valid{$size->{size}}{$_} ? "\N{CHECK MARK}" : q{ } } @sorted_regions;
+    my @region_cells = map {
+        $valid{$size->{size}}{$_}           ? "\N{CHECK MARK}"
+      : $region_excluded{$size->{size}}{$_} ? "\N{BALLOT X}"
+      :                                       q{ }
+    } @sorted_regions;
 
     $table->add(
       $size->{size},

@@ -37,6 +37,7 @@ sub execute ($self, $opt, $args) {
       scp
         -o UserKnownHostsFile=/dev/null
         -o StrictHostKeyChecking=no
+        -o ControlMaster=no
     ),
     ($opt->recursive ? '-r' : ()),
     @scp_args,

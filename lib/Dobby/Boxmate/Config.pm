@@ -66,13 +66,13 @@ sub load ($class) {
 
   if (-e $config_file) {
     require Carp;
-    require JSON::MaybeXS;
+    require JSON::XS;
     require TOML::Parser;
 
     my $parser = TOML::Parser->new(
       inflate_boolean  => sub {
-          $_[0] eq 'true'   ? JSON::MaybeXS::true()
-        : $_[0] eq 'false'  ? JSON::MaybeXS::false()
+          $_[0] eq 'true'   ? JSON::XS::true()
+        : $_[0] eq 'false'  ? JSON::XS::false()
         : Carp::confess("Unexpected value passed to inflate_boolean: $_[0]")
       }
     );

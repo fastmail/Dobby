@@ -9,7 +9,7 @@ use Carp ();
 use Future::AsyncAwait;
 use Future::Utils qw(repeat);
 use IO::Async::Loop;
-use JSON::MaybeXS;
+use JSON::XS;
 use Net::Async::HTTP;
 
 sub configure ($self, %param) {

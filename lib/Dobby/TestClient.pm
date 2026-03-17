@@ -9,7 +9,7 @@ use parent 'Dobby::Client';
 
 use Carp ();
 use HTTP::Response;
-use JSON::MaybeXS;
+use JSON::XS;
 use Test::Async::HTTP;
 
 # Test::Async::HTTP isn't an IO::Async::Notifier, so it doesn't need to be

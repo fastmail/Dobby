@@ -321,6 +321,7 @@ async sub create_droplet ($self, $spec) {
 
   my $message  = $spec->run_custom_setup   ? "Box created, will now run setup. Your box is: "
                :                             "Box created, will now unlock.  Your box is: ";
+
   if ($spec->run_standard_setup or $spec->run_custom_setup) {
     $self->handle_message(
       $message . $self->_format_droplet($droplet)

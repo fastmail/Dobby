@@ -11,27 +11,27 @@ use Time::HiRes qw(time);
 $|++;
 
 my ($opt, $usage) = describe_options(
-  '%c %o TEST-PATHS...',
-  [ 'run-id=s',     'an identifier for this run; required!', { required => 1 } ],
-  [],
+  '%c %o PLANFILE',
   [ 'color!',       'use color' ],
-  [],
-  [ \<<'END' ],
-The following switches each control actions that will run in the order in which
-the switches are documented.
-
-END
-  [ 'cyrus-version=s',      'build and deploy this Cyrus version'   ],
-  [ 'start-services!',       'start all services', { default => 1 } ],
-  [ 'setup-remotes',        'run bin/robots/setup-hm-remotes'       ],
-  [ 'fetch-remotes|F=s@',   'fetch the named remotes'               ],
-  [ 'reset-to=s',           'before testing, reset to named branch' ],
-  [ 'merge-branches|M=s@',  'merge the named branches'              ],
-  [ 'newt!',                'run newt tests', { default => 1 }      ],
-  [ 'junit!',               'junit test output', { default => 0 }   ],
-  [ 'cass!',                'run Cassandane tests'                  ],
-  [ 'cass-args=s@',         'pass these arguments to cassandane'    ],
 );
+
+unless (@ARGV == 1) {
+  $usage->die;
+}
+
+my $planfile = path($ARGV[0]);
+
+unless (-r $planfile) {
+  die "Can't read plan file $planfile: $!\n";
+}
+
+my $plan = eval { decode_json($planfile->slurp) };
+
+unless ($plan) {
+  die "Error decoding plan file $planfile: $@\n";
+}
+
+my $run_id = $plan->{run_id};
 
 my sub START ($task) {
   if ($ENV{FM_TASKSTREAM}) {
@@ -130,9 +130,9 @@ sub STEP_start_early_services ($self) {
 }
 
 sub STEP_setup_cyrus ($self) {
-  if ($opt->cyrus_version) {
-    return $self->STEP_install_cyrus;
-  }
+  # if ($opt->cyrus_version) {
+  #   return $self->STEP_install_cyrus;
+  # }
 
   START("checking Cyrus version");
   my $cyrus_version = `fmcyrpkg versions | grep fm | head -n1 | awk '{printf \$2}'`;
@@ -143,7 +143,7 @@ sub STEP_setup_cyrus ($self) {
 }
 
 sub STEP_install_cyrus ($self) {
-  my $cyrus_version = $opt->cyrus_version;
+  my $cyrus_version = die "!!!"; # $opt->cyrus_version;
   START("installing Cyrus $cyrus_version");
 
   $self->run_data->{cyrus_version} = $cyrus_version;
@@ -166,10 +166,6 @@ sub STEP_debian_upgrade ($self) {
 }
 
 sub STEP_start_services ($self) {
-  unless ($opt->start_services) {
-    return;
-  }
-
   # First up, get service running.  Without this, there's nothing to test.
   # This is optional because if we're running it against an existing, running
   # box, or just doing a compile test. -- adavis, 2021-03-01
@@ -183,10 +179,6 @@ sub STEP_start_services ($self) {
 }
 
 sub STEP_stop_services ($self) {
-  unless ($opt->start_services) {
-    return;
-  }
-
   START("stopping services");
 
   my $root = $self->root;
@@ -304,13 +296,10 @@ sub STEP_newt_full ($self) {
 }
 
 sub STEP_cassandane ($self) {
-  unless ($opt->cass) {
-    return;
-  }
-
   START("running Cassandane");
 
-  my $cass_args = $opt->cass_args ? join(' ', $opt->cass_args->@*) : '';
+  my $cass_args = ''; # XXX
+  # my $cass_args = $opt->cass_args ? join(' ', $opt->cass_args->@*) : '';
 
   my $user = `whoami`;
   chomp($user);
@@ -385,24 +374,23 @@ my @steps = qw(
 );
 
 my $testproc = TestProcess->new({
-  run_id => $opt->run_id,
-  root   => "/tmp/run-" . $opt->run_id,
+  run_id => $run_id,
+  root   => "/tmp/run-" . $run_id,
 });
 
-$testproc->STEP_boot_up;
-$testproc->STEP_start_early_services;
-$testproc->STEP_setup_cyrus;
-$testproc->STEP_switch_to_branch('fastmail/master');
-$testproc->STEP_debian_upgrade;
-# conf_diff
-$testproc->STEP_conf_update;
-$testproc->STEP_db_update;
-$testproc->STEP_knot_update;
-$testproc->STEP_cyrus_tmpfs;
-$testproc->STEP_start_services;
-# newt_compile
-$testproc->STEP_newt_full;
-$testproc->STEP_cassandane;
-$testproc->STEP_stop_services;
-$testproc->STEP_log_gather;
+my @instructions = $plan->{program}->@*;
 
+for my $instruction (@instructions) {
+  my ($name, @args) = @$instruction;
+
+  my $method = "STEP_$name";
+
+  unless ($testproc->can($method)) {
+    # XXX: validate all this before starting any work!
+    die "Test runner has no implementation for $name step\n";
+  }
+
+  $testproc->$method(@args);
+}
+
+say "All done!";

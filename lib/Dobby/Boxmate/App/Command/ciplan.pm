@@ -16,6 +16,27 @@ sub opt_spec {
   );
 }
 
+sub _template_program {
+  return [
+    [ boot_up              => () ],
+    [ start_early_services => () ],
+    [ setup_cyrus          => () ],
+    [ switch_to_branch     => 'fastmail/master' ],
+    [ debian_upgrade       => () ],
+    # [ conf_diff            => () ],
+    [ conf_update          => () ],
+    [ db_update            => () ],
+    [ knot_update          => () ],
+    [ cyrus_tmpfs          => () ],
+    [ start_services       => () ],
+    # [ newt_compile         => () ],
+    [ newt_full            => () ],
+    # [ cassandane           => () ],
+    [ stop_services        => () ],
+    [ log_gather           => () ],
+  ];
+}
+
 sub execute ($self, $opt, $args) {
   require JSON::XS;
   require Path::Tiny;
@@ -63,18 +84,14 @@ sub execute ($self, $opt, $args) {
     $size_preferences = [ $sizes[0] ];
   }
 
-  my $compile_only = $ENV{'NEWT_COMPILE_ONLY'}
-                   ? JSON::XS::true()
-                   : JSON::XS::false();
-
   # We don't put the Digital Ocean token into the plan because we assume that the
   # rest of the job is being run from the same environment.
   my $plan = {
     run_id => $run_id,
     size_preferences    => $size_preferences,
     region_preferences  => $region_preferences,
-    compile_only        => $compile_only,
     retain_droplet      => $retain_droplet,
+    program             => $self->_template_program,
   };
 
   # Probably we never have to read this by eye, but let's make it easy just in

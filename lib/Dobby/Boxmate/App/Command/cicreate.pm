@@ -16,13 +16,17 @@ sub usage_desc { '%c ci-create %o PLANFILE' }
 
 sub opt_spec {
   return (
-    [ 'verbose-setup',   'print all setup output verbatim instead of summarising' ],
+    [ 'verbose-setup',  'print all setup output verbatim instead of summarising' ],
+    [ 'username=s',     "put the box in this user's namespace", { default => $ENV{USER} }, ],
   );
 }
 
 sub validate_args ($self, $opt, $args) {
   @$args == 1
     || $self->usage->die({ pre_text => "No CI plan file provided.\n\n" });
+
+  $opt->username
+    || $self->usage->die({ pre_text => "Neither --username nor \$USER was supplied.\n\n" });
 }
 
 sub execute ($self, $opt, $args) {
@@ -42,7 +46,7 @@ sub execute ($self, $opt, $args) {
   my $spec = Dobby::BoxManager::ProvisionRequest->new({
     version   => 'bookworm', # TODO: make pickable
     label     => $label,
-    username  => 'ci',
+    username  => $opt->username,
 
     size_preferences   => $plan->{size_preferences},
     region_preferences => $plan->{region_preferences},

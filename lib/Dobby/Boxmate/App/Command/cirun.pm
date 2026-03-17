@@ -18,12 +18,14 @@ sub usage_desc {
 
 sub opt_spec {
   return (
-    [ 'taskstream|S',  'expect TASK:: protocol directives in the output' ],
+    [ 'taskstream|S', 'expect TASK:: protocol directives in the output' ],
+    [ 'username=s',   "put the box in this user's namespace", { default => $ENV{USER} }, ],
   );
 }
 
 sub validate_args ($self, $opt, $args) {
-  # ...
+  $opt->username
+    || $self->usage->die({ pre_text => "Neither --username nor \$USER was supplied.\n\n" });
 }
 
 sub execute ($self, $opt, $args) {
@@ -42,7 +44,10 @@ sub execute ($self, $opt, $args) {
   my $plan = JSON::XS->new->decode($json);
 
   my $boxman   = $self->boxman;
-  my $droplet  = $boxman->_get_droplet_for('ci', "ci-run-$plan->{run_id}")->get;
+  my $droplet  = $boxman->_get_droplet_for($opt->username, "ci-run-$plan->{run_id}")->get;
+
+  $droplet
+    || die "Can't find the droplet to use! Did you run 'box ci-create'?\n";
 
   $ip = $boxman->_ip_address_for_droplet($droplet);
 
@@ -74,7 +79,8 @@ sub execute ($self, $opt, $args) {
     ),
     @taskstream_env,
     "root\@$ip",
-    "/tmp/test-runner-on-vm --run-id $plan->{run_id}",
+    "/tmp/test-runner-on-vm",
+    "/tmp/$plan_file",
   );
 
   my $cb = $opt->taskstream

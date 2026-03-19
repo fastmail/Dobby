@@ -62,6 +62,11 @@ sub execute ($self, $opt, $args) {
   });
 
   my $droplet = $boxman->create_droplet($spec)->get;
+
+  my $ip = $boxman->_ip_address_for_droplet($droplet);
+  my $success = $boxman->_wait_for_ssh_up($ip)->get;
+
+  $success || die "ssh never became available on box\n";
 }
 
 1;

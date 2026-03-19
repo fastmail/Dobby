@@ -448,15 +448,7 @@ sub _get_my_ssh_key_file ($self, $spec) {
   return $key_file;
 }
 
-async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
-  my $ip_address = $self->_ip_address_for_droplet($droplet);
-
-  my $args = $spec->setup_switches // [];
-  unless ($self->_validate_setup_args($args)) {
-    $self->handle_message("Your /setup arguments don't meet my strict and undocumented requirements, sorry.  I'll act like you provided none.");
-    $args = [];
-  }
-
+async sub _wait_for_ssh_up ($self, $ip_address) {
   my $success;
   my $max_tries = 20;
   TRY: for my $try (1..$max_tries) {
@@ -506,6 +498,20 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
 
     await $self->dobby->loop->delay_future(after => 1);
   }
+
+  return $success;
+}
+
+async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
+  my $ip_address = $self->_ip_address_for_droplet($droplet);
+
+  my $args = $spec->setup_switches // [];
+  unless ($self->_validate_setup_args($args)) {
+    $self->handle_message("Your /setup arguments don't meet my strict and undocumented requirements, sorry.  I'll act like you provided none.");
+    $args = [];
+  }
+
+  my $success = await $self->_wait_for_ssh_up($ip_address);
 
   unless ($success) {
     # Really, this is an error, but when called in Synergy, we wouldn't want

@@ -18,6 +18,7 @@ sub opt_spec {
   return (
     [ 'verbose-setup',  'print all setup output verbatim instead of summarising' ],
     [ 'username=s',     "put the box in this user's namespace", { default => $ENV{USER} }, ],
+    [ 'digitalocean-ssh-key-name|K=s', 'name of key, in DO API, we want installed' ],
   );
 }
 
@@ -40,7 +41,12 @@ sub execute ($self, $opt, $args) {
 
   my $label = "ci-run-" . $plan->{run_id};
 
-  my $config = $self->app->config;
+  my $ssh_key_name = $opt->digitalocean_ssh_key_name;
+  unless (defined $ssh_key_name) {
+    my $config = $self->app->config;
+    $ssh_key_name = $config->digitalocean_ssh_key_name;
+  }
+
   my $boxman = $self->app->boxman(verbose_setup => $opt->verbose_setup);
 
   my $spec = Dobby::BoxManager::ProvisionRequest->new({
@@ -57,8 +63,7 @@ sub execute ($self, $opt, $args) {
     run_standard_setup  => 0,
     run_custom_setup    => 0,
 
-    # ($config->has_ssh_key_id ? (ssh_key_id  => $config->ssh_key_id) : ()),
-    digitalocean_ssh_key_name => $config->digitalocean_ssh_key_name,
+    digitalocean_ssh_key_name => $ssh_key_name,
   });
 
   my $droplet = $boxman->create_droplet($spec)->get;

@@ -48,7 +48,13 @@ sub execute ($self, $opt, $args) {
     die "I couldn't find the box you want to destroy.\n";
   }
 
+  my $time = time;
+  say "\e[0Ksection_start:$time:destroying-droplet[collapsed=true]\r\e[0KDestroying Droplet";
+
   $boxman->destroy_droplet($droplet, { force => 1 })->get;
+
+  $time = time;
+  say "\e[0Ksection_end:$time:destroying-droplet\r\e[0K";
 }
 
 1;

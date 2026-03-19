@@ -66,10 +66,15 @@ sub execute ($self, $opt, $args) {
     digitalocean_ssh_key_name => $ssh_key_name,
   });
 
+  my $time = time;
+  say "\e[0Ksection_start:$time:creating-droplet[collapsed=true]\r\e[0KCreating Droplet";
   my $droplet = $boxman->create_droplet($spec)->get;
 
   my $ip = $boxman->_ip_address_for_droplet($droplet);
   my $success = $boxman->_wait_for_ssh_up($ip)->get;
+
+  $time = time;
+  say "\e[0Ksection_end:$time:creating-droplet\r\e[0K";
 
   $success || die "ssh never became available on box\n";
 }

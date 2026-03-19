@@ -24,6 +24,11 @@ sub opt_spec {
 }
 
 sub validate_args ($self, $opt, $args) {
+  @$args == 1 || $self->usage->die;
+
+  my $plan_file = $args->[0];
+  -r $plan_file || die "Can't read plan file $plan_file!\n";
+
   $opt->username
     || $self->usage->die({ pre_text => "Neither --username nor \$USER was supplied.\n\n" });
 }

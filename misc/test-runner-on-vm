@@ -6,7 +6,7 @@ use JSON::XS;
 use Path::Tiny;
 use Process::Status;
 use Term::ANSIColor;
-use Time::HiRes qw(time);
+use Time::HiRes ();
 
 $|++;
 
@@ -33,12 +33,33 @@ unless ($plan) {
 
 my $run_id = $plan->{run_id};
 
-my sub START ($task) {
+my $curr;
+
+sub FINISH_CURR {
+  my $time = time;
+
+  if ($curr) {
+    say "\e[0Ksection_end:$time:$curr\r\e[0K";
+  }
+}
+
+my sub START ($task, $expanded = 0) {
+  my $time = time;
+
+  my $safe = $task;
+  $safe =~ tr/-a-z0-9/-/c;
+
   if ($ENV{FM_TASKSTREAM}) {
     say "TASK::START::$task";
   } else {
-    say "Starting task: $task...";
+    FINISH_CURR();
+
+    my $trailer = $expanded ? '' : '[collapsed=true]';
+    say "\e[0Ksection_start:$time:$safe$trailer\r\e[0KStarting task: $task...";
+
   }
+
+  $curr = $safe;
 }
 
 my sub maybe_colored {
@@ -79,11 +100,11 @@ sub run_cmd ($self, $cmd, $desc = $cmd, $arg = undef) {
 
   rem "Running command: $cmd";
 
-  my $start = time;
+  my $start = Time::HiRes::time();
   system('bash', '-c', $cmd);
   my $ps = Process::Status->new;
 
-  my $end  = time;
+  my $end  = Time::HiRes::time();
   my $time = $end - $start;
 
   $self->log_event({
@@ -112,10 +133,12 @@ sub STEP_boot_up ($self) {
   my $hm_head = `cd /home/mod_perl/hm; git rev-parse HEAD`;
   chomp $hm_head;
   $self->run_data->{hm_head} = $hm_head;
+  say "Starting from commit $hm_head";
 
   my $box_version = `cat /etc/fminabox.version`;
   chomp $box_version;
   $self->run_data->{box_version} = $box_version;
+  say "Building on fminabox.version $box_version";
 
   return;
 }
@@ -273,7 +296,7 @@ sub STEP_conf_update ($self) {
 }
 
 sub STEP_newt_full ($self) {
-  START("running Newt");
+  START("running Newt", 1);
   my $root = $self->root;
 
   my @tests = "t/me-util.t"; # XXX
@@ -382,5 +405,7 @@ for my $instruction (@instructions) {
 
   $testproc->$method(@args);
 }
+
+FINISH_CURR();
 
 say "All done!";

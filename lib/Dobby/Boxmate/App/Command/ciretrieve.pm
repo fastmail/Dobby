@@ -18,7 +18,8 @@ sub usage_desc {
 
 sub opt_spec {
   return (
-    [ 'username=s',   "retrieve from a box in this user's namespace", { default => $ENV{USER} }, ],
+    [ 'username=s', "retrieve from a box in this user's namespace", { default => $ENV{USER} }, ],
+    [ 'target=s',   "where to write the retrieved files", { default => "." } ],
   );
 }
 
@@ -58,7 +59,7 @@ sub execute ($self, $opt, $args) {
         -r
     ),
     "root\@$ip:/tmp/run-" . $plan->{run_id},
-    "./run-$plan->{run_id}",
+    $opt->target . "/run-$plan->{run_id}",
   );
 
   system @cmd;

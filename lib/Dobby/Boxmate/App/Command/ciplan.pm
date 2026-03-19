@@ -21,7 +21,7 @@ sub _template_program {
     [ boot_up              => () ],
     [ start_early_services => () ],
     [ setup_cyrus          => () ],
-    [ switch_to_branch     => 'fastmail/master' ],
+    [ switch_to_branch     => 'fastmail/hm', 'master' ],
     [ debian_upgrade       => () ],
     # [ conf_diff            => () ],
     [ conf_update          => () ],

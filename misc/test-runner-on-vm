@@ -189,24 +189,31 @@ sub STEP_stop_services ($self) {
   );
 }
 
-sub STEP_switch_to_branch ($self, $target) {
-  START("switching to branch $target");
+# The arguments here match the GitLab CI variables:
+#   $CI_MERGE_REQUEST_SOURCE_PROJECT_PATH - like "fastmail/hm" or "rjbs/hm"
+#   $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME  - like "master" or "bak-1234-pie"
+sub STEP_switch_to_branch ($self, $project_path, $branch) {
+  START("switching to branch $branch on project $project_path");
   chdir("/home/mod_perl/hm") or die "can't chdir to hm!";
 
-  my ($remote, $branch) = split q{/}, $target;
+  my $remote;
 
-  unless ($remote eq 'fastmail') {
-    rem "Setting up remotes...";
+  if ($project_path eq 'fastmail/hm') {
+    $remote = 'fastmail';
+  } else {
+    rem "Setting up remote...";
+
+    $remote = $project_path =~ s{/}{-}gr;
     $self->run_cmd(
-      "./bin/robots/setup-hm-remotes --quiet",
-      "setup-hm-remotes",
+      "git remote add $remote git\@gitlab.fm:$project_path.git",
+      "adding remote $remote",
     );
   }
 
   $self->run_cmd("git fetch $remote");
 
-  rem "Resetting hard to $target";
-  $self->run_cmd("git reset --quiet --hard $target");
+  rem "Resetting hard to $remote/$branch";
+  $self->run_cmd("git reset --quiet --hard $remote/$branch");
   return;
 }
 

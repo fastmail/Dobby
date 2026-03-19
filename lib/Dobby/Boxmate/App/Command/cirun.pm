@@ -34,8 +34,6 @@ sub validate_args ($self, $opt, $args) {
 }
 
 sub execute ($self, $opt, $args) {
-  my $ip;
-
   unless (-e -r "misc/test-runner-on-vm") {
     die "Can't find the CI program we want to inject!\n";
   }
@@ -54,7 +52,7 @@ sub execute ($self, $opt, $args) {
   $droplet
     || die "Can't find the droplet to use! Did you run 'box ci-create'?\n";
 
-  $ip = $boxman->_ip_address_for_droplet($droplet);
+  my $ip = $boxman->_ip_address_for_droplet($droplet);
 
   my @cmd = (
     qw(

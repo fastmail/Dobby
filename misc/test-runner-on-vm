@@ -363,23 +363,6 @@ sub STEP_log_gather ($self) {
 
 package main;
 
-my @steps = qw(
-  boot_up
-  install_cyrus
-  switch_to_branch
-  debian_upgrade
-  conf_diff
-  conf_update
-  db_update
-  knot_update
-  cyrus_tmpfs
-  start_services
-  newt_compile
-  newt_full
-  stop_services
-  collect_logs
-);
-
 my $testproc = TestProcess->new({
   run_id => $run_id,
   root   => "/tmp/run-" . $run_id,

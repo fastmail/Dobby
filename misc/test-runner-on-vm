@@ -382,6 +382,9 @@ sub STEP_log_gather ($self) {
       events => $self->event_log,
     }),
   );
+
+  say "Gathered in $root:";
+  system "find", "$root", "-type", "f";
 }
 
 package main;

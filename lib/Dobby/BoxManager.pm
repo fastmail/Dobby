@@ -327,11 +327,13 @@ async sub create_droplet ($self, $spec) {
       $message . $self->_format_droplet($droplet)
     );
 
-    return await $self->_setup_droplet(
+    await $self->_setup_droplet(
       $spec,
       $droplet,
       $key_file,
     );
+
+    return $droplet;
   }
 
   # We didn't have to run any setup!
@@ -339,7 +341,7 @@ async sub create_droplet ($self, $spec) {
     "Box created. Your box is: " . $self->_format_droplet($droplet)
   );
 
-  return;
+  return $droplet;
 }
 
 async sub find_provisioning_candidates ($self, %args) {

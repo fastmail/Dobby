@@ -2,8 +2,6 @@ ARG DEBIAN_VERSION=bookworm
 FROM debian:$DEBIAN_VERSION
 LABEL org.opencontainers.image.authors="Fastmail Plumbers <rjbs@fastmailteam.com>"
 
-COPY . /srv/ci-tooling
-
 RUN <<EOF
 # install prerequisites via apt-get
 set -e
@@ -40,3 +38,5 @@ cpanm -n \
   Process::Status
 rm -rf /root/.cpanm
 EOF
+
+COPY . /srv/ci-tooling

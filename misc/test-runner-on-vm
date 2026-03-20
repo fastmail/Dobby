@@ -2,11 +2,12 @@
 use v5.36.0;
 
 use Getopt::Long::Descriptive;
-use JSON::XS;
+use JSON::XS ();
 use Path::Tiny;
 use Process::Status;
 use Term::ANSIColor;
 use Time::HiRes ();
+use YAML::XS ();
 
 $|++;
 
@@ -19,13 +20,13 @@ unless (@ARGV <= 1) {
   $usage->die;
 }
 
-my $planfile = path($ARGV[0] // "ci-plan.json");
+my $planfile = path($ARGV[0] // "ci-plan.yaml");
 
 unless (-r $planfile) {
   die "Can't read plan file $planfile: $!\n";
 }
 
-my $plan = eval { decode_json($planfile->slurp) };
+my $plan = eval { YAML::XS::Load($planfile->slurp) };
 
 unless ($plan) {
   die "Error decoding plan file $planfile: $@\n";

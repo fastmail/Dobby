@@ -58,17 +58,20 @@ sub boxman ($self, %opts) {
   });
 }
 
-sub _default_plan_file { 'ci-plan.json' }
+sub _default_plan_file { 'ci-plan.yaml' }
 
 sub _read_plan_file ($self, $filename) {
   require Path::Tiny;
+  require YAML::XS;
   my $content = Path::Tiny::path($filename)->slurp;
-  return JSON::XS->new->decode($content);
+  return YAML::XS::Load($content);
 }
 
 sub _write_plan_file ($self, $filename, $data) {
   require Path::Tiny;
-  my $content = JSON::XS->new->canonical->pretty->utf8->encode($data);
+  require YAML::XS;
+  local $YAML::XS::Boolean = 'boolean';
+  my $content = YAML::XS::Dump($data);
   Path::Tiny::path($filename)->spew($content);
   return;
 }

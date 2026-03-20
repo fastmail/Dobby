@@ -5,6 +5,7 @@ use Dobby::Boxmate::App -command;
 
 use v5.36.0;
 use utf8;
+use experimental 'builtin';
 
 sub command_names {
   return qw(ci-plan ciplan);
@@ -63,8 +64,8 @@ sub execute ($self, $opt, $args) {
   my @labels = split q{,}, ($ENV{CI_MERGE_REQUEST_LABELS} // '');
 
   my $retain_droplet = (grep {; $_ eq 'dont-delete-testboxer' } @labels)
-                     ? JSON::XS::true()
-                     : JSON::XS::false();
+                     ? builtin::true
+                     : builtin::false;
 
   my (@regions) = map {; /\Atestboxer-region-(\S)+\z/ ? "$1" : () } @labels;
   if (@regions) {

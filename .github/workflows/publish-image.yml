@@ -1,0 +1,32 @@
+name: Create and publish an OCI image
+
+on:
+  push:
+    branches: [ 'main', 'ci-runner' ]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-push-image:
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITAL_OCEAN_TOKEN }}
+
+      - name: Log in to the Digital Ocean Container Registry
+        run: doctl registry login --expiry-seconds 600
+
+      - name: Build and push image
+        run: |
+          docker build -t registry.digitalocean.com/fastmail/autonewt-ci:latest .
+          docker push registry.digitalocean.com/fastmail/autonewt-ci:latest

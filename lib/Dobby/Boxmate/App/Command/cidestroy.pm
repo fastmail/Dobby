@@ -19,13 +19,13 @@ sub opt_spec {
 }
 
 sub usage_desc {
-  '%c destroy %o PLANFILE',
+  '%c destroy %o [PLANFILE]',
 }
 
 sub validate_args ($self, $opt, $args) {
-  @$args == 1 || $self->usage->die;
+  @$args <= 1 || $self->usage->die;
 
-  my $plan_file = $args->[0];
+  my $plan_file = $args->[0] // $self->app->_default_plan_file;
   -r $plan_file || die "Can't read plan file $plan_file!\n";
 
   $opt->username
@@ -33,13 +33,10 @@ sub validate_args ($self, $opt, $args) {
 }
 
 sub execute ($self, $opt, $args) {
-  require Path::Tiny;
   require Process::Status;
-  require JSON::XS;
 
-  my $plan_file = $args->[0];
-  my $json = Path::Tiny::path($plan_file)->slurp;
-  my $plan = JSON::XS->new->decode($json);
+  my $plan_file = $args->[0] // $self->app->_default_plan_file;
+  my $plan = $self->app->_read_plan_file($plan_file);
 
   my $boxman   = $self->boxman;
   my $droplet  = $boxman->_get_droplet_for($opt->username, "ci-run-$plan->{run_id}")->get;

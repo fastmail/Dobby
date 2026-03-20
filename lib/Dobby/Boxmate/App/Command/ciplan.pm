@@ -94,11 +94,9 @@ sub execute ($self, $opt, $args) {
     program             => $self->_template_program,
   };
 
-  # Probably we never have to read this by eye, but let's make it easy just in
-  # case.
-  Path::Tiny::path('ci-plan.json')->spew(
-    JSON::XS->new->canonical->pretty->utf8->encode($plan)
-  );
+  my $plan_file = $args->[0] // $self->app->_default_plan_file;
+  $self->app->_write_plan_file($plan_file, $plan);
+  return;
 }
 
 # FM_API_TOKEN: was used to run setup-hm-remotes

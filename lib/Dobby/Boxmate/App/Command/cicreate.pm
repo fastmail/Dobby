@@ -12,7 +12,7 @@ sub command_names {
 
 sub abstract { 'create a box on which to run a given CI plan' }
 
-sub usage_desc { '%c ci-create %o PLANFILE' }
+sub usage_desc { '%c ci-create %o [PLANFILE]' }
 
 sub opt_spec {
   return (
@@ -23,19 +23,15 @@ sub opt_spec {
 }
 
 sub validate_args ($self, $opt, $args) {
-  @$args == 1
-    || $self->usage->die({ pre_text => "No CI plan file provided.\n\n" });
+  @$args <= 1 || $self->usage->die;
 
   $opt->username
     || $self->usage->die({ pre_text => "Neither --username nor \$USER was supplied.\n\n" });
 }
 
 sub execute ($self, $opt, $args) {
-  require Path::Tiny;
-  require JSON::XS;
-
-  my $json = Path::Tiny::path($args->[0])->slurp;
-  my $plan = JSON::XS->new->decode($json);
+  my $plan_file = $args->[0] // $self->app->_default_plan_file;
+  my $plan = $self->app->_read_plan_file($plan_file);
 
   # TODO: validate plan?
 

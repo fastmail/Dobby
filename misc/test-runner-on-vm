@@ -15,11 +15,11 @@ my ($opt, $usage) = describe_options(
   [ 'color!',       'use color' ],
 );
 
-unless (@ARGV == 1) {
+unless (@ARGV <= 1) {
   $usage->die;
 }
 
-my $planfile = path($ARGV[0]);
+my $planfile = path($ARGV[0] // "ci-plan.json");
 
 unless (-r $planfile) {
   die "Can't read plan file $planfile: $!\n";

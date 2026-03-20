@@ -12,6 +12,7 @@ apt-get install -y --no-install-recommends  \
   openssh-client \
   cpanminus \
   libapp-cmd-perl \
+  libboolean-perl \
   libdata-guid-perl \
   libfuture-perl \
   libfuture-asyncawait-perl \
@@ -24,6 +25,7 @@ apt-get install -y --no-install-recommends  \
   libstring-flogger-perl \
   libtime-duration-perl \
   libtoml-parser-perl \
+  libyaml-libyaml-perl \
   `# below this are really only for testing, but why not?` \
   libtest-deep-perl \
   libtest-async-http-perl

@@ -70,7 +70,7 @@ sub execute ($self, $opt, $args) {
   my $success = $boxman->_wait_for_ssh_up($ip)->get;
 
   $time = time;
-  say "\e[0Ksection_end:$time:creating-droplet\r\e[0K";
+  print "\e[0Ksection_end:$time:creating-droplet\r\e[0K";
 
   $success || die "ssh never became available on box\n";
 }

@@ -57,7 +57,7 @@ sub execute ($self, $opt, $args) {
   $boxman->destroy_droplet($droplet, { force => 1 })->get;
 
   $time = time;
-  say "\e[0Ksection_end:$time:destroying-droplet\r\e[0K";
+  print "\e[0Ksection_end:$time:destroying-droplet\r\e[0K";
 }
 
 1;

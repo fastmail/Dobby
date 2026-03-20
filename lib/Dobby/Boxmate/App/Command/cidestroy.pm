@@ -14,7 +14,8 @@ sub abstract { 'destroy a CI box' }
 
 sub opt_spec {
   return (
-    [ 'username=s',   "put the box in this user's namespace", { default => $ENV{USER} }, ],
+    [ 'username=s', "put the box in this user's namespace", { default => $ENV{USER} }, ],
+    [ 'force',      "destroy even if the plan says not to" ],
   );
 }
 
@@ -37,6 +38,11 @@ sub execute ($self, $opt, $args) {
 
   my $plan_file = $args->[0] // $self->app->_default_plan_file;
   my $plan = $self->app->_read_plan_file($plan_file);
+
+  if ($plan->{retain_droplet} && ! $opt->force) {
+    say "Won't destroy box without --force, the plan says to keep it.";
+    exit;
+  }
 
   my $boxman   = $self->boxman;
   my $droplet  = $boxman->_get_droplet_for($opt->username, "ci-run-$plan->{run_id}")->get;

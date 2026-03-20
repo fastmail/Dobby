@@ -12,21 +12,23 @@ my %base = (
   label    => 'mybox',
 );
 
+sub prov_req ($spec) {
+  ref $spec eq 'ARRAY'
+    ? Dobby::BoxManager::ProvisionRequest->new(@$spec,   digitalocean_ssh_key_name => 'fake-key')
+    : Dobby::BoxManager::ProvisionRequest->new({ %$spec, digitalocean_ssh_key_name => 'fake-key'});
+}
+
 # Pass a hashref to use hashref construction; pass an arrayref to use
 # flat-list construction (the array is spread as the argument list).
 sub new_request_ok ($spec, $expect, $description) {
   local $Test::Builder::Level = $Test::Builder::Level + 1;
-  my $req = ref $spec eq 'ARRAY'
-          ? eval { Dobby::BoxManager::ProvisionRequest->new(@$spec) }
-          : eval { Dobby::BoxManager::ProvisionRequest->new($spec) };
+  my $req = eval { prov_req($spec) };
   cmp_deeply($req, $expect, $description);
 }
 
 sub new_request_fail_ok ($spec, $expect, $description) {
   local $Test::Builder::Level = $Test::Builder::Level + 1;
-  ref $spec eq 'ARRAY'
-    ? eval { Dobby::BoxManager::ProvisionRequest->new(@$spec) }
-    : eval { Dobby::BoxManager::ProvisionRequest->new($spec) };
+  eval { prov_req($spec) };
   cmp_deeply($@, $expect, $description);
 }
 

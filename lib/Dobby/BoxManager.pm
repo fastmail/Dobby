@@ -108,7 +108,7 @@ package Dobby::BoxManager::ProvisionRequest {
   has run_standard_setup => (is => 'ro', isa => 'Bool', default => 1);
 
   has ssh_key_id => (is  => 'ro', isa => 'Str', predicate => 'has_ssh_key_id');
-  has digitalocean_ssh_key_name => (is  => 'ro', isa => 'Str', default => 'synergy');
+  has digitalocean_ssh_key_name => (is  => 'ro', isa => 'Str', required => 1);
 
   # When true, region beats size in preference resolution: useful for
   # interactive use where latency matters more than cost control.

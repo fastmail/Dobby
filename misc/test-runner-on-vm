@@ -285,11 +285,11 @@ sub STEP_conf_update ($self) {
   return;
 }
 
-sub STEP_newt_full ($self) {
+sub STEP_newt_full ($self, @args) {
   START("running Newt", 1);
   my $root = $self->root;
 
-  my @tests = "t/me-util.t"; # XXX
+  my @tests = @args;
 
   # Test slow things
   my $yath_env = join(" ",

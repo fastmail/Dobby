@@ -326,11 +326,10 @@ sub STEP_newt_full ($self) {
   );
 }
 
-sub STEP_cassandane ($self) {
+sub STEP_cassandane ($self, @args) {
   START("running Cassandane");
 
-  my $cass_args = ''; # XXX
-  # my $cass_args = $opt->cass_args ? join(' ', $opt->cass_args->@*) : '';
+  my $cass_args = join q{ }, @args;
 
   my $user = `whoami`;
   chomp($user);

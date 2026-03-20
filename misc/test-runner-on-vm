@@ -5,7 +5,6 @@ use Getopt::Long::Descriptive;
 use JSON::XS ();
 use Path::Tiny;
 use Process::Status;
-use Term::ANSIColor;
 use Time::HiRes ();
 use YAML::XS ();
 
@@ -63,16 +62,6 @@ my sub START ($task, $expanded = 0) {
   $curr = $safe;
 }
 
-my sub maybe_colored {
-  state $COLOR = $opt->color;
-  return $_[1] unless $COLOR;
-  return colored($_[0], $_[1]);
-}
-
-my sub rem {
-  printf "[%s] %s\n", maybe_colored(['bright_magenta'], 'VIRT'), $_[0];
-}
-
 package TestProcess;
 use Moo;
 
@@ -99,7 +88,7 @@ sub log_event ($self, $event) {
 sub run_cmd ($self, $cmd, $desc = $cmd, $arg = undef) {
   my $may_fail = $arg && $arg->{may_fail};
 
-  rem "Running command: $cmd";
+  say "Running command: $cmd";
 
   my $start = Time::HiRes::time();
   system('bash', '-c', $cmd);
@@ -225,7 +214,7 @@ sub STEP_switch_to_branch ($self, $project_path, $branch) {
   if ($project_path eq 'fastmail/hm') {
     $remote = 'fastmail';
   } else {
-    rem "Setting up remote...";
+    say "Setting up remote...";
 
     $remote = $project_path =~ s{/}{-}gr;
     $self->run_cmd(
@@ -236,7 +225,7 @@ sub STEP_switch_to_branch ($self, $project_path, $branch) {
 
   $self->run_cmd("git fetch $remote");
 
-  rem "Resetting hard to $remote/$branch";
+  say "Resetting hard to $remote/$branch";
   $self->run_cmd("git reset --quiet --hard $remote/$branch");
   return;
 }

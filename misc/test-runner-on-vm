@@ -130,6 +130,11 @@ sub STEP_boot_up ($self) {
   $self->run_data->{box_version} = $box_version;
   say "Building on fminabox.version $box_version";
 
+  $self->run_cmd(
+    "ssh-keyscan box-fastmail-01 box-fastmail-01.internal >> ~/.ssh/known_hosts",
+    "generating known hosts",
+  );
+
   return;
 }
 

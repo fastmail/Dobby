@@ -469,7 +469,7 @@ async sub _wait_for_ssh_up ($self, $ip_address) {
       undef $socket;
 
       $self->handle_log([
-        "ssh on %s is up, will now move on to running setup",
+        "ssh on %s is now up",
         $ip_address,
       ]);
 

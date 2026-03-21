@@ -1,5 +1,5 @@
 ARG DEBIAN_VERSION=bookworm
-FROM debian:$DEBIAN_VERSION
+FROM debian:${DEBIAN_VERSION}-slim
 LABEL org.opencontainers.image.authors="Fastmail Plumbers <rjbs@fastmailteam.com>"
 
 RUN <<EOF

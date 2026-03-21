@@ -136,8 +136,8 @@ sub STEP_boot_up ($self) {
 sub STEP_start_early_services ($self) {
   START("starting early services");
 
-  $self->run_cmd("sudo /etc/init.d/rsyslog start", "start rsyslog");
-  $self->run_cmd("sudo /etc/init.d/consul start",  "start consul");
+  $self->run_cmd("/etc/init.d/rsyslog start", "start rsyslog");
+  $self->run_cmd("/etc/init.d/consul start",  "start consul");
 
   return;
 }
@@ -163,7 +163,7 @@ sub STEP_install_cyrus ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "sudo fmcyrpkg deploy --really --yolo --allow-downgrade --type stable $cyrus_version 2>&1 | tee $root/deploy-cyrus.log",
+    "fmcyrpkg deploy --really --yolo --allow-downgrade --type stable $cyrus_version 2>&1 | tee $root/deploy-cyrus.log",
     "fmcyrpkg deploy",
   );
 }
@@ -173,7 +173,7 @@ sub STEP_debian_upgrade ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "sudo /home/mod_perl/hm/scripts/debian_upgrade.sh --really 2>&1 | tee $root/debup.log",
+    "/home/mod_perl/hm/scripts/debian_upgrade.sh --really 2>&1 | tee $root/debup.log",
     "debian_upgrade.sh",
   );
 }
@@ -186,7 +186,7 @@ sub STEP_start_services ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "sudo /home/mod_perl/hm/utils/Services.pl all start -v 2>&1 | tee $root/srv-all-start.log",
+    "/home/mod_perl/hm/utils/Services.pl all start -v 2>&1 | tee $root/srv-all-start.log",
     "srv all start",
   );
 }
@@ -196,7 +196,7 @@ sub STEP_stop_services ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "sudo /home/mod_perl/hm/utils/Services.pl all fstop -v 2>&1 | tee $root/srv-all-stop.log",
+    "/home/mod_perl/hm/utils/Services.pl all fstop -v 2>&1 | tee $root/srv-all-stop.log",
     "srv all fstop",
     { may_fail => 1 },
   );
@@ -278,7 +278,7 @@ sub STEP_conf_update ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "sudo make -C conf/ installfiles REALLY=1 2>&1 | tee $root/installfiles.log",
+    "make -C conf/ installfiles REALLY=1 2>&1 | tee $root/installfiles.log",
     "conf installfiles",
   );
 
@@ -309,7 +309,7 @@ sub STEP_newt_full ($self, @args) {
     qq{$yath_env yath test $yath_opts --log-file $root/test-results @tests};
 
   $self->run_cmd(
-    "sudo bash -c '$cmd'",
+    "bash -c '$cmd'",
     "yath",
     { may_fail => 1 },
   );
@@ -335,17 +335,17 @@ sub STEP_cassandane ($self, @args) {
     qq{chown cyrus .},
     qq{sudo -u cyrus env PERL5LIB=/home/mod_perl/hm:\$PERL5LIB ./testrunner.pl --config $root/cassandane.ini $cass_args 2>&1 | tee $root/cassandane.log};
 
-  $cmd = "sudo bash -c '$cmd'";
+  $cmd = "bash -c '$cmd'";
 
   $self->run_cmd($cmd, "cassandane", { may_fail => 1 });
 
   $self->run_cmd(
-    "sudo cp -r $root/cyrus-imapd/cassandane/reports $root/cass_reports",
+    "cp -r $root/cyrus-imapd/cassandane/reports $root/cass_reports",
     "cp reports",
   );
 
   $self->run_cmd(
-    "sudo tar -cJf $root/archive.tar.xz /dev/shm/cass/ 2>&1 | tee -a $root/tar.log",
+    "tar -cJf $root/archive.tar.xz /dev/shm/cass/ 2>&1 | tee -a $root/tar.log",
     "tar",
     { may_fail => 1 },
   );

@@ -133,6 +133,19 @@ sub STEP_boot_up ($self) {
   return;
 }
 
+sub STEP_bash ($self, $script) {
+  # Yeah, that's right, you can just straight up put some bash in here and have
+  # it run.  Like… just in case.  Matthew asked for it.
+  state $script_num = 1; # Wait, you can have *multiple* bash scripts??
+
+  START("running bash script $script_num");
+
+  my $script_file = Path::Tiny::path("/tmp/bash-script." . $script_num++);
+  $script_file->spew($script);
+
+  $self->run_cmd("bash $script_file");
+}
+
 sub STEP_start_early_services ($self) {
   START("starting early services");
 

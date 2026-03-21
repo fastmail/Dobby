@@ -32,7 +32,7 @@ sub _template_program {
   return [
     [ boot_up              => () ],
     [ start_early_services => () ],
-    [ setup_cyrus          => () ],
+    # [ install_cyrus        => $version ],
     [ switch_to_branch     => @switch_args ],
     [ debian_upgrade       => () ],
     [ conf_update          => () ],

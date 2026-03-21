@@ -160,30 +160,47 @@ sub STEP_start_early_services ($self) {
   return;
 }
 
-sub STEP_setup_cyrus ($self) {
-  # if ($opt->cyrus_version) {
-  #   return $self->STEP_install_cyrus;
-  # }
+sub _mint_tag ($self) {
+  local $ENV{GITHUB_API_TOKEN} = $ENV{FM_GITHUB_API_TOKEN}
+    // die "Can't mint tag, FM_GITHUB_API_TOKEN not set.\n";
 
-  START("checking Cyrus version");
-  my $cyrus_version = `fmcyrpkg versions | grep fm | head -n1 | awk '{printf \$2}'`;
-  chomp $cyrus_version;
-
-  $self->run_data->{cyrus_version} = $cyrus_version;
-  return;
-}
-
-sub STEP_install_cyrus ($self) {
-  my $cyrus_version = die "!!!"; # $opt->cyrus_version;
-  START("installing Cyrus $cyrus_version");
-
-  $self->run_data->{cyrus_version} = $cyrus_version;
+  local $ENV{GITLAB_API_TOKEN} = $ENV{FM_GITLAB_API_TOKEN}
+    // die "Can't mint tag, FM_GITLAB_API_TOKEN not set.\n";
 
   my $root = $self->root;
   $self->run_cmd(
-    "fmcyrpkg deploy --really --yolo --allow-downgrade --type stable $cyrus_version 2>&1 | tee $root/deploy-cyrus.log",
+    "mint-tag -v -c /home/mod_perl/hm/infrastructure/packages/mint-cyrus-ci.toml --auto"
+      . " | tee /$root/mint-cyrus.log",
+    "minting tag",
+  );
+
+  my $text = Path::Tiny::path("/$root/mint-cyrus.log")->slurp;
+  my ($version) = $text =~ /git push gitlab (fmci-\S+)/;
+
+  return $version;
+}
+
+sub STEP_install_cyrus ($self, $version) {
+  if ($version eq 'new') {
+    START("minting new Cyrus version");
+    $version = $self->_mint_tag;
+  }
+
+  # TODO: $version eq stable/staff/future
+
+  START("installing Cyrus $version");
+
+  my $root = $self->root;
+  $self->run_cmd(
+    "fmcyrpkg deploy --really --yolo --allow-downgrade --type stable $version 2>&1 | tee $root/deploy-cyrus.log",
     "fmcyrpkg deploy",
   );
+
+  START("checking Cyrus version");
+  my $reported_version = `fmcyrpkg versions | grep fm | head -n1 | awk '{printf \$2}'`;
+  chomp $reported_version;
+
+  $self->run_data->{cyrus_version} = $reported_version;
 }
 
 sub STEP_debian_upgrade ($self) {
@@ -341,31 +358,25 @@ sub STEP_cassandane ($self, @args) {
   my $user = `whoami`;
   chomp($user);
 
+  my $cass_workdir = Path::Tiny::tempdir(CLEANUP => 0);
   my $root = $self->root;
 
   my $cmd = join q{ && },
     qq{set -o pipefail},
     qq{set -x},
-    qq{export FMADMIN=$user},
-    qq{cd $root},
-    qq{fmdev cass --allow-root --working-dir $root 2>&1 | tee $root/fmdev-cass.log},
+    qq{cd $cass_workdir},
+    qq{fmdev cass --allow-root --working-dir $cass_workdir 2>&1 | tee $root/fmdev-cass.log},
     qq{cd cyrus-imapd/cassandane},
     qq{chown cyrus .},
-    qq{sudo -u cyrus env PERL5LIB=/home/mod_perl/hm:\$PERL5LIB ./testrunner.pl --config $root/cassandane.ini $cass_args 2>&1 | tee $root/cassandane.log};
+    qq{sudo -u cyrus env PERL5LIB=/home/mod_perl/hm:\$PERL5LIB ./testrunner.pl --config $cass_workdir/cassandane.ini $cass_args 2>&1 | tee $root/cassandane.log};
 
   $cmd = "bash -c '$cmd'";
 
   $self->run_cmd($cmd, "cassandane", { may_fail => 1 });
 
   $self->run_cmd(
-    "cp -r $root/cyrus-imapd/cassandane/reports $root/cass_reports",
+    "cp -r $cass_workdir/cyrus-imapd/cassandane/reports $root/cass_reports",
     "cp reports",
-  );
-
-  $self->run_cmd(
-    "tar -cJf $root/archive.tar.xz /dev/shm/cass/ 2>&1 | tee -a $root/tar.log",
-    "tar",
-    { may_fail => 1 },
   );
 
   return;

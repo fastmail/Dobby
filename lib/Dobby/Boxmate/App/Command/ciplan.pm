@@ -18,11 +18,22 @@ sub opt_spec {
 }
 
 sub _template_program {
+  my (@switch_args) = qw( fastmail/hm master );
+
+  if (  $ENV{CI_MERGE_REQUEST_SOURCE_PROJECT_PATH}
+    &&  $ENV{CI_MERGE_REQUEST_SOURCE_BRANCH_NAME}
+  ) {
+    @switch_args = (
+      $ENV{CI_MERGE_REQUEST_SOURCE_PROJECT_PATH},
+      $ENV{CI_MERGE_REQUEST_SOURCE_BRANCH_NAME},
+    );
+  }
+
   return [
     [ boot_up              => () ],
     [ start_early_services => () ],
     [ setup_cyrus          => () ],
-    [ switch_to_branch     => 'fastmail/hm', 'master' ],
+    [ switch_to_branch     => @switch_args ],
     [ debian_upgrade       => () ],
     [ conf_update          => () ],
     [ db_update            => () ],

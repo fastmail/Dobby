@@ -1,5 +1,6 @@
 #!/usr/bin/perl
 use v5.36.0;
+use utf8;
 
 use Getopt::Long::Descriptive;
 use JSON::XS ();
@@ -7,6 +8,8 @@ use Path::Tiny;
 use Process::Status;
 use Time::HiRes ();
 use YAML::XS ();
+
+binmode *STDOUT, ':encoding(UTF-8)';
 
 $|++;
 
@@ -62,8 +65,26 @@ my sub START ($task, $expanded = 0) {
   $curr = $safe;
 }
 
+my sub ERROR ($message) {
+  if ($ENV{FM_TASKSTREAM}) {
+    say "TASK::ERROR::$message";
+  } else {
+    say "❌ $message";
+  }
+}
+
 package TestProcess;
 use Moo;
+use v5.36.0;
+
+has is_passing => (
+  is => 'rw',
+  default => 1,
+);
+
+sub mark_failing ($self) {
+  $self->is_passing(0);
+}
 
 has run_id => (is => 'ro', required => 1);
 has root   => (is => 'ro', required => 1);
@@ -86,7 +107,9 @@ sub log_event ($self, $event) {
 }
 
 sub run_cmd ($self, $cmd, $desc = $cmd, $arg = undef) {
-  my $may_fail = $arg && $arg->{may_fail};
+  $arg //={};
+
+  my $on_fail = $arg->{on_fail} // 'die';
 
   say "Running command: $cmd";
 
@@ -101,11 +124,30 @@ sub run_cmd ($self, $cmd, $desc = $cmd, $arg = undef) {
     slug    => $desc || $cmd,
     command => $cmd,
     took    => 0 + sprintf('%.2f', $time),
-    result  => Process::Status->as_struct,
+    result  => $ps->as_struct,
   });
 
-  unless ($arg->{may_fail}) {
-    Process::Status->assert_ok($cmd);
+  unless ($ps->is_success) {
+    ON_FAIL: {
+      if ($on_fail eq 'mark_failing') {
+        ERROR("nonzero exit from $desc: " . $ps->as_string);
+        $self->mark_failing;
+        last ON_FAIL;
+      }
+
+      if ($on_fail eq 'ignore') {
+        # Do nothing, because we're ignoring it!
+        last ON_FAIL;
+      }
+
+      if ($on_fail ne 'die') {
+        # This shouldn't happen, but we don't have compile-time enum type
+        # checking! ;-)
+        ERROR("Unknown on_fail argument: $on_fail");
+      }
+
+      Process::Status->assert_ok($cmd);
+    }
   }
 
   return $ps->exitstatus;
@@ -233,7 +275,7 @@ sub STEP_stop_services ($self) {
   $self->run_cmd(
     "/home/mod_perl/hm/utils/Services.pl all fstop -v 2>&1 | tee $root/srv-all-stop.log",
     "srv all fstop",
-    { may_fail => 1 },
+    { on_fail => 'ignore' },
   );
 }
 
@@ -282,7 +324,7 @@ sub STEP_knot_update ($self) {
   my $exitstatus = $self->run_cmd(
     "/home/mod_perl/hm/bin/humans/fmknot diffourdomains --all 2>&1 | tee $root/knot-diff.log",
     "knot diff",
-    { may_fail => 1 },
+    { on_fail => 'ignore' }, # …because we look at $exitstatus below!
   );
 
   return if $exitstatus == 0;
@@ -346,7 +388,7 @@ sub STEP_newt_full ($self, @args) {
   $self->run_cmd(
     "bash -c '$cmd'",
     "yath",
-    { may_fail => 1 },
+    { on_fail => 'mark_failing' },
   );
 }
 
@@ -372,7 +414,7 @@ sub STEP_cassandane ($self, @args) {
 
   $cmd = "bash -c '$cmd'";
 
-  $self->run_cmd($cmd, "cassandane", { may_fail => 1 });
+  $self->run_cmd($cmd, "cassandane", { on_fail => 'mark_failing' });
 
   $self->run_cmd(
     "cp -r $cass_workdir/cyrus-imapd/cassandane/reports $root/cass_reports",
@@ -392,7 +434,7 @@ sub STEP_log_gather ($self) {
   # Search for absolutely all logs for the last day and write them out.
   my $cmd = "$log_grep -L 1d -l '*' --stream '' | gzip > $root/lg-logs.txt.gz";
 
-  $self->run_cmd($cmd, 'lg', { may_fail => 1 });
+  $self->run_cmd($cmd, 'lg', { on_fail => 'ignore' });
 
   Path::Tiny::path("$root/events.json")->spew_utf8(
     JSON::XS->new->pretty->canonical->encode({
@@ -429,4 +471,10 @@ for my $instruction (@instructions) {
 
 FINISH_CURR();
 
-say "All done!";
+if ($testproc->is_passing) {
+  say "All tests successful!";
+  exit 0;
+}
+
+say "Test results could be improved somewhat.";
+exit 1;

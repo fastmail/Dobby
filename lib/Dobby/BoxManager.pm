@@ -108,7 +108,7 @@ package Dobby::BoxManager::ProvisionRequest {
   has run_standard_setup => (is => 'ro', isa => 'Bool', default => 1);
 
   has ssh_key_id => (is  => 'ro', isa => 'Str', predicate => 'has_ssh_key_id');
-  has digitalocean_ssh_key_name => (is  => 'ro', isa => 'Str', default => 'synergy');
+  has digitalocean_ssh_key_name => (is  => 'ro', isa => 'Str', required => 1);
 
   # When true, region beats size in preference resolution: useful for
   # interactive use where latency matters more than cost control.
@@ -321,16 +321,19 @@ async sub create_droplet ($self, $spec) {
 
   my $message  = $spec->run_custom_setup   ? "Box created, will now run setup. Your box is: "
                :                             "Box created, will now unlock.  Your box is: ";
+
   if ($spec->run_standard_setup or $spec->run_custom_setup) {
     $self->handle_message(
       $message . $self->_format_droplet($droplet)
     );
 
-    return await $self->_setup_droplet(
+    await $self->_setup_droplet(
       $spec,
       $droplet,
       $key_file,
     );
+
+    return $droplet;
   }
 
   # We didn't have to run any setup!
@@ -338,7 +341,7 @@ async sub create_droplet ($self, $spec) {
     "Box created. Your box is: " . $self->_format_droplet($droplet)
   );
 
-  return;
+  return $droplet;
 }
 
 async sub find_provisioning_candidates ($self, %args) {
@@ -447,15 +450,7 @@ sub _get_my_ssh_key_file ($self, $spec) {
   return $key_file;
 }
 
-async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
-  my $ip_address = $self->_ip_address_for_droplet($droplet);
-
-  my $args = $spec->setup_switches // [];
-  unless ($self->_validate_setup_args($args)) {
-    $self->handle_message("Your /setup arguments don't meet my strict and undocumented requirements, sorry.  I'll act like you provided none.");
-    $args = [];
-  }
-
+async sub _wait_for_ssh_up ($self, $ip_address) {
   my $success;
   my $max_tries = 20;
   TRY: for my $try (1..$max_tries) {
@@ -474,7 +469,7 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
       undef $socket;
 
       $self->handle_log([
-        "ssh on %s is up, will now move on to running setup",
+        "ssh on %s is now up",
         $ip_address,
       ]);
 
@@ -505,6 +500,20 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
 
     await $self->dobby->loop->delay_future(after => 1);
   }
+
+  return $success;
+}
+
+async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
+  my $ip_address = $self->_ip_address_for_droplet($droplet);
+
+  my $args = $spec->setup_switches // [];
+  unless ($self->_validate_setup_args($args)) {
+    $self->handle_message("Your /setup arguments don't meet my strict and undocumented requirements, sorry.  I'll act like you provided none.");
+    $args = [];
+  }
+
+  my $success = await $self->_wait_for_ssh_up($ip_address);
 
   unless ($success) {
     # Really, this is an error, but when called in Synergy, we wouldn't want

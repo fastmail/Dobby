@@ -4,6 +4,7 @@ use parent 'App::Cmd::Command';
 # ABSTRACT: the base class for box commands
 
 use v5.36.0;
+use experimental 'builtin';
 
 sub boxman ($self) {
   $self->app->boxman;

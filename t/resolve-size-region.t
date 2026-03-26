@@ -34,6 +34,7 @@ my sub _get_size_and_region ($spec, $snapshot) {
   );
 
   my $prov_req = Dobby::BoxManager::ProvisionRequest->new(
+    digitalocean_ssh_key_name => 'fake-key',
     username => 'testuser',
     version  => '1.0',
     label    => 'test',

@@ -1,0 +1,488 @@
+#!/usr/bin/perl
+use v5.36.0;
+use utf8;
+
+use Getopt::Long::Descriptive;
+use JSON::XS ();
+use Path::Tiny;
+use Process::Status;
+use Time::HiRes ();
+use YAML::XS ();
+
+binmode *STDOUT, ':encoding(UTF-8)';
+
+$|++;
+
+my ($opt, $usage) = describe_options(
+  '%c %o PLANFILE',
+  [ 'color!',       'use color' ],
+);
+
+unless (@ARGV <= 1) {
+  $usage->die;
+}
+
+my $planfile = path($ARGV[0] // "ci-plan.yaml");
+
+unless (-r $planfile) {
+  die "Can't read plan file $planfile: $!\n";
+}
+
+my $plan = eval { YAML::XS::Load($planfile->slurp) };
+
+unless ($plan) {
+  die "Error decoding plan file $planfile: $@\n";
+}
+
+my $run_id = $plan->{run_id};
+
+my $curr;
+
+sub FINISH_CURR {
+  my $time = time;
+
+  if ($curr) {
+    say "\e[0Ksection_end:$time:$curr\r\e[0K";
+  }
+}
+
+my sub START ($task, $expanded = 0) {
+  my $time = time;
+
+  my $safe = $task;
+  $safe =~ tr/-a-z0-9/-/c;
+
+  if ($ENV{FM_TASKSTREAM}) {
+    say "TASK::START::$task";
+  } else {
+    FINISH_CURR();
+
+    my $trailer = $expanded ? '' : '[collapsed=true]';
+    say "\e[0Ksection_start:$time:$safe$trailer\r\e[0KStarting task: $task...";
+
+  }
+
+  $curr = $safe;
+}
+
+my sub ERROR ($message) {
+  if ($ENV{FM_TASKSTREAM}) {
+    say "TASK::ERROR::$message";
+  } else {
+    say "❌ $message";
+  }
+}
+
+package TestProcess;
+use Moo;
+use v5.36.0;
+
+has is_passing => (
+  is => 'rw',
+  default => 1,
+);
+
+sub mark_failing ($self) {
+  $self->is_passing(0);
+}
+
+has run_id => (is => 'ro', required => 1);
+has root   => (is => 'ro', required => 1);
+
+has run_data => (
+  is => 'ro',
+  init_arg => undef,
+  default  => sub {  {}  },
+);
+
+has event_log => (
+  is => 'ro',
+  init_arg => undef,
+  default  => sub {  []  },
+);
+
+sub log_event ($self, $event) {
+  push $self->event_log->@*, $event;
+  return;
+}
+
+sub run_cmd ($self, $cmd, $desc = $cmd, $arg = undef) {
+  $arg //={};
+
+  my $on_fail = $arg->{on_fail} // 'die';
+
+  say "Running command: $cmd";
+
+  my $start = Time::HiRes::time();
+  system('bash', '-c', $cmd);
+  my $ps = Process::Status->new;
+
+  my $end  = Time::HiRes::time();
+  my $time = $end - $start;
+
+  $self->log_event({
+    slug    => $desc || $cmd,
+    command => $cmd,
+    took    => 0 + sprintf('%.2f', $time),
+    result  => $ps->as_struct,
+  });
+
+  unless ($ps->is_success) {
+    ON_FAIL: {
+      if ($on_fail eq 'mark_failing') {
+        ERROR("nonzero exit from $desc: " . $ps->as_string);
+        $self->mark_failing;
+        last ON_FAIL;
+      }
+
+      if ($on_fail eq 'ignore') {
+        # Do nothing, because we're ignoring it!
+        last ON_FAIL;
+      }
+
+      if ($on_fail ne 'die') {
+        # This shouldn't happen, but we don't have compile-time enum type
+        # checking! ;-)
+        ERROR("Unknown on_fail argument: $on_fail");
+      }
+
+      Process::Status->assert_ok($cmd);
+    }
+  }
+
+  return $ps->exitstatus;
+}
+
+sub STEP_boot_up ($self) {
+  my $user = `whoami`;
+  START("initializing testrunner, running as $user");
+
+  my $root = $self->root;
+
+  mkdir $root
+    or die "can't create test run directory $root: $!";
+
+  my $hm_head = `cd /home/mod_perl/hm; git rev-parse HEAD`;
+  chomp $hm_head;
+  $self->run_data->{hm_head} = $hm_head;
+  say "Starting from commit $hm_head";
+
+  my $box_version = `cat /etc/fminabox.version`;
+  chomp $box_version;
+  $self->run_data->{box_version} = $box_version;
+  say "Building on fminabox.version $box_version";
+
+  $self->run_cmd(
+    "ssh-keyscan box-fastmail-01 box-fastmail-01.internal >> ~/.ssh/known_hosts",
+    "generating known hosts",
+  );
+
+  return;
+}
+
+sub STEP_bash ($self, $script) {
+  # Yeah, that's right, you can just straight up put some bash in here and have
+  # it run.  Like… just in case.  Matthew asked for it.
+  state $script_num = 1; # Wait, you can have *multiple* bash scripts??
+
+  START("running bash script $script_num");
+
+  my $script_file = Path::Tiny::path("/tmp/bash-script." . $script_num++);
+  $script_file->spew($script);
+
+  $self->run_cmd("bash $script_file");
+}
+
+sub STEP_start_early_services ($self) {
+  START("starting early services");
+
+  $self->run_cmd("/etc/init.d/rsyslog start", "start rsyslog");
+  $self->run_cmd("/etc/init.d/consul start",  "start consul");
+
+  return;
+}
+
+sub _mint_tag ($self) {
+  local $ENV{GITHUB_API_TOKEN} = $ENV{FM_GITHUB_API_TOKEN}
+    // die "Can't mint tag, FM_GITHUB_API_TOKEN not set.\n";
+
+  local $ENV{GITLAB_API_TOKEN} = $ENV{FM_GITLAB_API_TOKEN}
+    // die "Can't mint tag, FM_GITLAB_API_TOKEN not set.\n";
+
+  my $root = $self->root;
+  $self->run_cmd(
+    "mint-tag -v -c /home/mod_perl/hm/infrastructure/packages/mint-cyrus-ci.toml --auto"
+      . " | tee /$root/mint-cyrus.log",
+    "minting tag",
+  );
+
+  my $text = Path::Tiny::path("/$root/mint-cyrus.log")->slurp;
+  my ($version) = $text =~ /git push gitlab (fmci-\S+)/;
+
+  return $version;
+}
+
+sub STEP_install_cyrus ($self, $version) {
+  if ($version eq 'new') {
+    START("minting new Cyrus version");
+    $version = $self->_mint_tag;
+  }
+
+  # TODO: $version eq stable/staff/future
+
+  START("installing Cyrus $version");
+
+  my $root = $self->root;
+  $self->run_cmd(
+    "fmcyrpkg deploy --really --yolo --allow-downgrade --type stable $version 2>&1 | tee $root/deploy-cyrus.log",
+    "fmcyrpkg deploy",
+  );
+
+  START("checking Cyrus version");
+  my $reported_version = `fmcyrpkg versions | grep fm | head -n1 | awk '{printf \$2}'`;
+  chomp $reported_version;
+
+  $self->run_data->{cyrus_version} = $reported_version;
+}
+
+sub STEP_debian_upgrade ($self) {
+  START("running Debian upgrade");
+
+  my $root = $self->root;
+  $self->run_cmd(
+    "/home/mod_perl/hm/scripts/debian_upgrade.sh --really 2>&1 | tee $root/debup.log",
+    "debian_upgrade.sh",
+  );
+}
+
+sub STEP_start_services ($self) {
+  # First up, get service running.  Without this, there's nothing to test.
+  # This is optional because if we're running it against an existing, running
+  # box, or just doing a compile test. -- adavis, 2021-03-01
+  START("starting all services");
+
+  my $root = $self->root;
+  $self->run_cmd(
+    "/home/mod_perl/hm/utils/Services.pl all start -v 2>&1 | tee $root/srv-all-start.log",
+    "srv all start",
+  );
+}
+
+sub STEP_stop_services ($self) {
+  START("stopping services");
+
+  my $root = $self->root;
+  $self->run_cmd(
+    "/home/mod_perl/hm/utils/Services.pl all fstop -v 2>&1 | tee $root/srv-all-stop.log",
+    "srv all fstop",
+    { on_fail => 'ignore' },
+  );
+}
+
+# The arguments here match the GitLab CI variables:
+#   $CI_MERGE_REQUEST_SOURCE_PROJECT_PATH - like "fastmail/hm" or "rjbs/hm"
+#   $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME  - like "master" or "bak-1234-pie"
+sub STEP_switch_to_branch ($self, $project_path, $branch) {
+  START("switching to branch $branch on project $project_path");
+  chdir("/home/mod_perl/hm") or die "can't chdir to hm!";
+
+  my $remote;
+
+  if ($project_path eq 'fastmail/hm') {
+    $remote = 'fastmail';
+  } else {
+    say "Setting up remote...";
+
+    $remote = $project_path =~ s{/}{-}gr;
+    $self->run_cmd(
+      "git remote add $remote git\@gitlab.fm:$project_path.git",
+      "adding remote $remote",
+    );
+  }
+
+  $self->run_cmd("git fetch $remote");
+
+  say "Resetting hard to $remote/$branch";
+  $self->run_cmd("git reset --quiet --hard $remote/$branch");
+  return;
+}
+
+sub STEP_db_update ($self) {
+  START("updating database to latest");
+
+  my $root = $self->root;
+  $self->run_cmd(
+    "/home/mod_perl/hm/db/dbupdate.pl --version 0 /home/mod_perl/hm/db/fm.sql --force 2>&1 | tee $root/dbupdate.log",
+    "dbudpate.pl",
+  );
+}
+
+sub STEP_knot_update ($self) {
+  START("checking for knot diff");
+
+  my $root = $self->root;
+  my $exitstatus = $self->run_cmd(
+    "/home/mod_perl/hm/bin/humans/fmknot diffourdomains --all 2>&1 | tee $root/knot-diff.log",
+    "knot diff",
+    { on_fail => 'ignore' }, # …because we look at $exitstatus below!
+  );
+
+  return if $exitstatus == 0;
+
+  if ($exitstatus > 1) {
+    die "knot diff failed, exited $exitstatus";
+  }
+
+  START("updating our domains in knot");
+  $self->run_cmd(
+    "(/home/mod_perl/hm/bin/robots/knot-update-our-domains --all --really; /home/mod_perl/hm/bin/humans/fmrbl rebuild; /home/mod_perl/hm/bin/robots/update_domain_common_fastmail_flag --really) 2>&1 | tee $root/knot-update.log",
+    "knot update",
+  );
+}
+
+sub STEP_cyrus_tmpfs ($self) {
+  START("configuring Cyrus to use tmpfs");
+
+  my $root = $self->root;
+  $self->run_cmd(
+    "(source /etc/fmhome/bashrc; cd /home/mod_perl/hm; penv; fmdev tmpfs --really) 2>&1 | tee $root/fmdev-tmpfs.log",
+    "fmdev tmpfs",
+  );
+}
+
+sub STEP_conf_update ($self) {
+  START("installing all config files");
+
+  my $root = $self->root;
+  $self->run_cmd(
+    "make -C conf/ installfiles REALLY=1 2>&1 | tee $root/installfiles.log",
+    "conf installfiles",
+  );
+
+  return;
+}
+
+sub STEP_newt_full ($self, @args) {
+  START("running Newt", 1);
+  my $root = $self->root;
+
+  my @tests = @args;
+
+  # Test slow things
+  my $yath_env = join(" ",
+    "ME_TEST_SLOW=1",
+    "AUTOMATED_TESTING=DAILY",
+    "JUNIT_TEST_FILE=$root/yath-output.xml",
+    "ME_LOG_TESTIDENT=yath",
+    "ZENDESK_CLIENT_RATE_LIMIT_RETRY_COUNT=3"
+  );
+
+  my $yath_opts = "--tlib -P ME::Test::Instance --bzip2";
+
+  my $cmd = join q{ ; },
+    qq{source /etc/fmhome/bashrc},
+    qq{penv},
+    qq{cd /home/mod_perl/hm},
+    qq{$yath_env yath test $yath_opts --log-file $root/test-results @tests};
+
+  $self->run_cmd(
+    "bash -c '$cmd'",
+    "yath",
+    { on_fail => 'mark_failing' },
+  );
+}
+
+sub STEP_cassandane ($self, @args) {
+  START("running Cassandane");
+
+  my $cass_args = join q{ }, @args;
+
+  my $user = `whoami`;
+  chomp($user);
+
+  my $cass_workdir = Path::Tiny::tempdir(CLEANUP => 0);
+
+  my (undef, undef, $cyrus_uid, $cyrus_gid) = getpwnam('cyrus');
+  defined $cyrus_uid && defined $cyrus_gid
+    || die "cyrus not in passwd file?!";
+
+  chown($cyrus_uid, $cyrus_gid, "$cass_workdir")
+    || die "Couldn't chown $cass_workdir to cyrus: $!";
+
+  my $root = $self->root;
+
+  my $cmd = join q{ && },
+    qq{set -o pipefail},
+    qq{set -x},
+    qq{cd $cass_workdir},
+    qq{fmdev cass --allow-root --working-dir $cass_workdir 2>&1 | tee $root/fmdev-cass.log},
+    qq{cd cyrus-imapd/cassandane},
+    qq{chown cyrus .},
+    qq{sudo -u cyrus env PERL5LIB=/home/mod_perl/hm:\$PERL5LIB ./testrunner.pl --config $cass_workdir/cassandane.ini $cass_args 2>&1 | tee $root/cassandane.log};
+
+  $cmd = "bash -c '$cmd'";
+
+  $self->run_cmd($cmd, "cassandane", { on_fail => 'mark_failing' });
+
+  $self->run_cmd(
+    "cp -r $cass_workdir/cyrus-imapd/cassandane/reports $root/cass_reports",
+    "cp reports",
+  );
+
+  return;
+}
+
+sub STEP_log_gather ($self) {
+  START("gathering logs");
+
+  my $root = $self->root;
+
+  my $log_grep = '/home/mod_perl/hm/bin/humans/log-grep';
+
+  # Search for absolutely all logs for the last day and write them out.
+  my $cmd = "$log_grep -L 1d -l '*' --stream '' | gzip > $root/lg-logs.txt.gz";
+
+  $self->run_cmd($cmd, 'lg', { on_fail => 'ignore' });
+
+  Path::Tiny::path("$root/events.json")->spew_utf8(
+    JSON::XS->new->pretty->canonical->encode({
+      $self->run_data->%*,
+      events => $self->event_log,
+    }),
+  );
+
+  say "Gathered in $root:";
+  system "find", "$root", "-type", "f";
+}
+
+package main;
+
+my $testproc = TestProcess->new({
+  run_id => $run_id,
+  root   => "/tmp/run-" . $run_id,
+});
+
+my @instructions = $plan->{program}->@*;
+
+for my $instruction (@instructions) {
+  my ($name, @args) = @$instruction;
+
+  my $method = "STEP_$name";
+
+  unless ($testproc->can($method)) {
+    # XXX: validate all this before starting any work!
+    die "Test runner has no implementation for $name step\n";
+  }
+
+  $testproc->$method(@args);
+}
+
+FINISH_CURR();
+
+if ($testproc->is_passing) {
+  say "All tests successful!";
+  exit 0;
+}
+
+say "Test results could be improved somewhat.";
+exit 1;

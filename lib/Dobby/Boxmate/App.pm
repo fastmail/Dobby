@@ -58,4 +58,22 @@ sub boxman ($self, %opts) {
   });
 }
 
+sub _default_plan_file { 'ci-plan.yaml' }
+
+sub _read_plan_file ($self, $filename) {
+  require Path::Tiny;
+  require YAML::XS;
+  my $content = Path::Tiny::path($filename)->slurp;
+  return YAML::XS::Load($content);
+}
+
+sub _write_plan_file ($self, $filename, $data) {
+  require Path::Tiny;
+  require YAML::XS;
+  local $YAML::XS::Boolean = 'boolean';
+  my $content = YAML::XS::Dump($data);
+  Path::Tiny::path($filename)->spew($content);
+  return;
+}
+
 1;

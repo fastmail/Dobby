@@ -401,6 +401,14 @@ sub STEP_cassandane ($self, @args) {
   chomp($user);
 
   my $cass_workdir = Path::Tiny::tempdir(CLEANUP => 0);
+
+  my (undef, undef, $cyrus_uid, $cyrus_gid) = getpwnam('cyrus');
+  defined $cyrus_uid && defined $cyrus_gid
+    || die "cyrus not in passwd file?!";
+
+  chown($cyrus_uid, $cyrus_gid, "$cass_workdir")
+    || die "Couldn't chown $cass_workdir to cyrus: $!";
+
   my $root = $self->root;
 
   my $cmd = join q{ && },

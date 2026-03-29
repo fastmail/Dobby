@@ -19,6 +19,7 @@ sub opt_spec {
     [ 'verbose-setup',  'print all setup output verbatim instead of summarising' ],
     [ 'username=s',     "put the box in this user's namespace", { default => $ENV{USER} }, ],
     [ 'digitalocean-ssh-key-name|K=s', 'name of key, in DO API, we want installed' ],
+    [ 'box-version=s', 'the inabox image version', {default => 'bookworm'}],
   );
 }
 
@@ -46,7 +47,7 @@ sub execute ($self, $opt, $args) {
   my $boxman = $self->app->boxman(verbose_setup => $opt->verbose_setup);
 
   my $spec = Dobby::BoxManager::ProvisionRequest->new({
-    version   => 'bookworm', # TODO: make pickable
+    version   => $opt->box_version,
     label     => $label,
     username  => $opt->username,
 

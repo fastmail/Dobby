@@ -377,7 +377,12 @@ sub STEP_newt_full ($self, @args) {
     "ZENDESK_CLIENT_RATE_LIMIT_RETRY_COUNT=3"
   );
 
-  my $yath_opts = "--tlib -P ME::Test::Instance --bzip2 --jobs 12";
+  my $yath_opts = join q{ }, qw(
+    --tlib
+    --preloads ME::Test::Instance
+    --bzip2
+    --jobs 12
+  );
 
   my $cmd = join q{ ; },
     qq{source /etc/fmhome/bashrc},

@@ -382,6 +382,8 @@ sub STEP_newt_full ($self, @args) {
     --preloads ME::Test::Instance
     --bzip2
     --jobs 12
+    --renderer=Formatter
+    --renderer=JUnit
   );
 
   my $cmd = join q{ ; },

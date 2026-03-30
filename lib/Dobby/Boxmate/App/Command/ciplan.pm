@@ -14,6 +14,7 @@ sub command_names {
 sub opt_spec {
   return (
     [ 'run-id=s', 'CI run id, defaults to $CI_JOB_ID or a guid' ],
+    [ 'verbose|v', 'Print plan to stdout'],
   );
 }
 
@@ -105,7 +106,7 @@ sub execute ($self, $opt, $args) {
   };
 
   my $plan_file = $args->[0] // $self->app->_default_plan_file;
-  $self->app->_write_plan_file($plan_file, $plan);
+  $self->app->_write_plan_file($plan_file, $plan, $opt->verbose);
   return;
 }
 

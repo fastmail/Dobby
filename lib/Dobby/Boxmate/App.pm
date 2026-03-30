@@ -67,12 +67,13 @@ sub _read_plan_file ($self, $filename) {
   return YAML::XS::Load($content);
 }
 
-sub _write_plan_file ($self, $filename, $data) {
+sub _write_plan_file ($self, $filename, $data, $verbose = undef) {
   require Path::Tiny;
   require YAML::XS;
   local $YAML::XS::Boolean = 'boolean';
   my $content = YAML::XS::Dump($data);
   Path::Tiny::path($filename)->spew($content);
+  print "Plan:\n" . $content if $verbose;
   return;
 }
 

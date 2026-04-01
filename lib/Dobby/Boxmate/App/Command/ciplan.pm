@@ -58,7 +58,8 @@ sub execute ($self, $opt, $args) {
             // $ENV{CI_JOB_ID}
             // lc(Data::GUID->new->as_hex =~ s/^0x//r);
 
-  my $ERR = q{❌};
+  my $ERR = "\N{CROSS MARK}";
+  my $HEY = "\N{HEAVY EXCLAMATION MARK SYMBOL}";
 
   # For all the predefined variables, check out:
   # https://docs.gitlab.com/ci/variables/predefined_variables/
@@ -84,6 +85,7 @@ sub execute ($self, $opt, $args) {
       warn "$ERR More than one region label!  Going with $regions[0].\n";
     }
 
+    say "$HEY Merge request specified a distinct region: $regions[0]";
     $region_preferences = [ $regions[0] ];
   }
 
@@ -93,6 +95,7 @@ sub execute ($self, $opt, $args) {
       warn "$ERR More than one size label!  Going with $sizes[0].\n";
     }
 
+    say "$HEY Merge request specified a distinct size: $sizes[0]";
     $size_preferences = [ $sizes[0] ];
   }
 

@@ -451,6 +451,10 @@ sub _get_my_ssh_key_file ($self, $spec) {
 }
 
 async sub _wait_for_ssh_up ($self, $ip_address) {
+  unless (defined $ip_address) {
+    $self->handle_error("can't wait for ssh on an undefined IP address");
+  }
+
   my $success;
   my $max_tries = 20;
   TRY: for my $try (1..$max_tries) {

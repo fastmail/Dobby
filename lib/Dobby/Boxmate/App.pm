@@ -72,8 +72,11 @@ sub _write_plan_file ($self, $filename, $data) {
   require YAML::XS;
   local $YAML::XS::Boolean = 'boolean';
   my $content = YAML::XS::Dump($data);
-  Path::Tiny::path($filename)->spew($content);
-  return;
+  my $file = Path::Tiny::path($filename);
+
+  $file->spew($content);
+
+  return $file;
 }
 
 1;

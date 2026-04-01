@@ -7,6 +7,8 @@ use v5.36.0;
 use utf8;
 use experimental 'builtin';
 
+use Dobby::GitLabUtil '-all';
+
 sub command_names {
   return qw(ci-plan ciplan);
 }
@@ -104,8 +106,13 @@ sub execute ($self, $opt, $args) {
     program             => $self->_template_program,
   };
 
-  my $plan_file = $args->[0] // $self->app->_default_plan_filename;
-  $self->app->_write_plan_file($plan_file, $plan);
+  my $plan_filename = $args->[0] // $self->app->_default_plan_filename;
+  my $plan_file = $self->app->_write_plan_file($plan_filename, $plan);
+
+  start_section('plan-content', "Generated $plan_filename:");
+  say $plan_file->slurp_utf8;
+  end_section('plan-content');
+
   return;
 }
 

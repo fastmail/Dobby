@@ -79,7 +79,7 @@ sub execute ($self, $opt, $args) {
                      ? builtin::true
                      : builtin::false;
 
-  my (@regions) = map {; /\Atestboxer-region-(\S)+\z/ ? "$1" : () } @labels;
+  my (@regions) = map {; /\Atestboxer-region-(\S+)\z/ ? "$1" : () } @labels;
   if (@regions) {
     if (@regions > 1) {
       warn "$ERR More than one region label!  Going with $regions[0].\n";
@@ -89,7 +89,7 @@ sub execute ($self, $opt, $args) {
     $region_preferences = [ $regions[0] ];
   }
 
-  my (@sizes) = map {; /\Atestboxer-size-(\S)+\z/ ? "$1" : () } @labels;
+  my (@sizes) = map {; /\Atestboxer-size-(\S+)\z/ ? "$1" : () } @labels;
   if (@sizes) {
     if (@sizes > 1) {
       warn "$ERR More than one size label!  Going with $sizes[0].\n";

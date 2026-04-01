@@ -6,6 +6,8 @@ use Dobby::Boxmate::App -command;
 use v5.36.0;
 use utf8;
 
+use Dobby::GitLabUtil '-all';
+
 sub command_names {
   return qw(ci-create cicreate);
 }
@@ -63,11 +65,11 @@ sub execute ($self, $opt, $args) {
     digitalocean_ssh_key_name => $ssh_key_name,
   });
 
-  my $time = time;
-  say "\e[0Ksection_start:$time:creating-droplet[collapsed=true]\r\e[0KCreating Droplet";
+  start_section('creating-droplet', 'Creating Droplet');
+
   my $droplet = $boxman->create_droplet($spec)->get;
 
-  my sub end_section { print "\e[0Ksection_end:$time:creating-droplet\r\e[0K" }
+  my sub end_section { end_section('creating-droplet') }
 
   unless ($droplet) {
     warn "no droplet returned after create_droplet call!?\n";
@@ -87,8 +89,7 @@ sub execute ($self, $opt, $args) {
 
   my $success = $boxman->_wait_for_ssh_up($ip)->get;
 
-  $time = time;
-  print "\e[0Ksection_end:$time:creating-droplet\r\e[0K";
+  end_section();
 
   $success || die "ssh never became available on box\n";
 }

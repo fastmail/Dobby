@@ -23,6 +23,7 @@ apt-get install -y --no-install-recommends  \
   libnet-async-http-perl \
   libpath-tiny-perl \
   libstring-flogger-perl \
+  libsub-exporter-perl \
   libtime-duration-perl \
   libtoml-parser-perl \
   libyaml-libyaml-perl \

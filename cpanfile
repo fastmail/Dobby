@@ -21,6 +21,7 @@ requires "Net::Async::HTTP" => "0";
 requires "Path::Tiny" => "0";
 requires "Process::Status" => "0";
 requires "String::Flogger" => "0";
+requires "Sub::Exporter" => "0";
 requires "TOML::Parser" => "0";
 requires "Term::ANSIColor" => "0";
 requires "Test::Async::HTTP" => "0";

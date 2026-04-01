@@ -104,7 +104,7 @@ sub execute ($self, $opt, $args) {
     program             => $self->_template_program,
   };
 
-  my $plan_file = $args->[0] // $self->app->_default_plan_file;
+  my $plan_file = $args->[0] // $self->app->_default_plan_filename;
   $self->app->_write_plan_file($plan_file, $plan);
   return;
 }

@@ -26,7 +26,7 @@ sub opt_spec {
 sub validate_args ($self, $opt, $args) {
   @$args <= 1 || $self->usage->die;
 
-  my $plan_file = $args->[0] // $self->app->_default_plan_file;
+  my $plan_file = $args->[0] // $self->app->_default_plan_filename;
   -r $plan_file || die "Can't read plan file $plan_file!\n";
 
   $opt->username
@@ -36,7 +36,7 @@ sub validate_args ($self, $opt, $args) {
 sub execute ($self, $opt, $args) {
   require Process::Status;
 
-  my $plan_file = $args->[0] // $self->app->_default_plan_file;
+  my $plan_file = $args->[0] // $self->app->_default_plan_filename;
   my $plan = $self->app->_read_plan_file($plan_file);
 
   my $boxman   = $self->boxman;

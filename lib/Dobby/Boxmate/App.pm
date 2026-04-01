@@ -58,7 +58,7 @@ sub boxman ($self, %opts) {
   });
 }
 
-sub _default_plan_file { 'ci-plan.yaml' }
+sub _default_plan_filename { 'ci-plan.yaml' }
 
 sub _read_plan_file ($self, $filename) {
   require Path::Tiny;

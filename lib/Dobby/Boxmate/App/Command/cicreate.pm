@@ -31,7 +31,7 @@ sub validate_args ($self, $opt, $args) {
 }
 
 sub execute ($self, $opt, $args) {
-  my $plan_file = $args->[0] // $self->app->_default_plan_file;
+  my $plan_file = $args->[0] // $self->app->_default_plan_filename;
   my $plan = $self->app->_read_plan_file($plan_file);
 
   # TODO: validate plan?

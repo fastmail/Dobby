@@ -67,7 +67,24 @@ sub execute ($self, $opt, $args) {
   say "\e[0Ksection_start:$time:creating-droplet[collapsed=true]\r\e[0KCreating Droplet";
   my $droplet = $boxman->create_droplet($spec)->get;
 
+  my sub end_section { print "\e[0Ksection_end:$time:creating-droplet\r\e[0K" }
+
+  unless ($droplet) {
+    warn "no droplet returned after create_droplet call!?\n";
+    end_section();
+    exit 1;
+  }
+
   my $ip = $boxman->_ip_address_for_droplet($droplet);
+
+  unless ($ip) {
+    require JSON::XS;
+    my $json = eval { JSON::XS->new->pretty->canonical->encode($droplet) };
+    warn "couldn't determine IP from Droplet: $json\n";
+    end_section();
+    exit 1;
+  }
+
   my $success = $boxman->_wait_for_ssh_up($ip)->get;
 
   $time = time;

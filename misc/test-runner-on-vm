@@ -211,7 +211,7 @@ sub _mint_tag ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "mint-tag -v -c /home/mod_perl/hm/infrastructure/packages/mint-cyrus-ci.toml --auto"
+    "set -o pipefail; mint-tag -v -c /home/mod_perl/hm/infrastructure/packages/mint-cyrus-ci.toml --auto"
       . " | tee /$root/mint-cyrus.log",
     "minting tag",
   );
@@ -234,7 +234,7 @@ sub STEP_install_cyrus ($self, $version) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "fmcyrpkg deploy --really --yolo --allow-downgrade --type stable $version 2>&1 | tee $root/deploy-cyrus.log",
+    "set -o pipefail; fmcyrpkg deploy --really --yolo --allow-downgrade --type stable $version 2>&1 | tee $root/deploy-cyrus.log",
     "fmcyrpkg deploy",
   );
 
@@ -250,7 +250,7 @@ sub STEP_debian_upgrade ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "/home/mod_perl/hm/scripts/debian_upgrade.sh --really 2>&1 | tee $root/debup.log",
+    "set -o pipefail; /home/mod_perl/hm/scripts/debian_upgrade.sh --really 2>&1 | tee $root/debup.log",
     "debian_upgrade.sh",
   );
 }
@@ -263,7 +263,7 @@ sub STEP_start_services ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "/home/mod_perl/hm/utils/Services.pl all start -v 2>&1 | tee $root/srv-all-start.log",
+    "set -o pipefail; /home/mod_perl/hm/utils/Services.pl all start -v 2>&1 | tee $root/srv-all-start.log",
     "srv all start",
   );
 }
@@ -273,7 +273,7 @@ sub STEP_stop_services ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "/home/mod_perl/hm/utils/Services.pl all fstop -v 2>&1 | tee $root/srv-all-stop.log",
+    "set -o pipefail; /home/mod_perl/hm/utils/Services.pl all fstop -v 2>&1 | tee $root/srv-all-stop.log",
     "srv all fstop",
     { on_fail => 'ignore' },
   );
@@ -312,7 +312,7 @@ sub STEP_db_update ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "/home/mod_perl/hm/db/dbupdate.pl --version 0 /home/mod_perl/hm/db/fm.sql --force 2>&1 | tee $root/dbupdate.log",
+    "set -o pipefail; /home/mod_perl/hm/db/dbupdate.pl --version 0 /home/mod_perl/hm/db/fm.sql --force 2>&1 | tee $root/dbupdate.log",
     "dbudpate.pl",
   );
 }
@@ -322,7 +322,7 @@ sub STEP_knot_update ($self) {
 
   my $root = $self->root;
   my $exitstatus = $self->run_cmd(
-    "/home/mod_perl/hm/bin/humans/fmknot diffourdomains --all 2>&1 | tee $root/knot-diff.log",
+    "set -o pipefail; /home/mod_perl/hm/bin/humans/fmknot diffourdomains --all 2>&1 | tee $root/knot-diff.log",
     "knot diff",
     { on_fail => 'ignore' }, # …because we look at $exitstatus below!
   );
@@ -345,7 +345,7 @@ sub STEP_cyrus_tmpfs ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "(source /etc/fmhome/bashrc; cd /home/mod_perl/hm; penv; fmdev tmpfs --really) 2>&1 | tee $root/fmdev-tmpfs.log",
+    "set -o pipefail; (source /etc/fmhome/bashrc; cd /home/mod_perl/hm; penv; fmdev tmpfs --really) 2>&1 | tee $root/fmdev-tmpfs.log",
     "fmdev tmpfs",
   );
 }
@@ -355,7 +355,7 @@ sub STEP_conf_update ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "make -C conf/ installfiles REALLY=1 2>&1 | tee $root/installfiles.log",
+    "set -o pipefail; make -C conf/ installfiles REALLY=1 2>&1 | tee $root/installfiles.log",
     "conf installfiles",
   );
 

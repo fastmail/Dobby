@@ -301,6 +301,12 @@ async sub create_droplet ($self, $spec) {
     # still good and there's not really much else we can do.
     my $box_domain = $self->box_domain;
 
+    my $got_ip = await $self->_wait_for_droplet_to_have_network($droplet);
+
+    unless ($got_ip) {
+      $self->handle_error("Droplet never received an IP address.");
+    }
+
     my $ip_addr = $self->_ip_address_for_droplet($droplet);
 
     my $name = $self->_dns_name_for($spec->username, $spec->label);
@@ -448,6 +454,28 @@ sub _get_my_ssh_key_file ($self, $spec) {
   }
 
   return $key_file;
+}
+
+async sub _wait_for_droplet_to_have_network ($self, $droplet) {
+  my $max_tries = 20;
+
+  TRY: for my $try (1..$max_tries) {
+    my $ip_address = $self->_ip_address_for_droplet($droplet);
+    return 1 if $ip_address;
+
+    $self->handle_log([
+      "no IP address for droplet yet, will wait and try again; %s tries remain",
+      $ip_address,
+      $max_tries - $try,
+    ]);
+
+    await $self->dobby->loop->delay_future(after => 1);
+
+    my $refetch = await $self->dobby->get_droplet_by_id($droplet->{id});
+    %$droplet = %$refetch if $refetch;
+  }
+
+  return;
 }
 
 async sub _wait_for_ssh_up ($self, $ip_address) {

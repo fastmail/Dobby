@@ -12,7 +12,7 @@ sub start_section ($ident, $header, $collapsed = 1) {
 
 sub end_section ($ident) {
   my $time = time;
-  print "\e[0Ksection_end:$time:$ident\r\e[0K";
+  say "\e[0Ksection_end:$time:$ident\r\e[0K";
 }
 
 1;

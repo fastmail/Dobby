@@ -174,7 +174,7 @@ async sub create_droplet ($self, $arg) {
     },
   );
 
-  my $droplet   = $create_res->{droplet};
+  my $droplet = $create_res->{droplet};
 
   unless ($droplet) {
     Carp::confess("Error creating Droplet.");

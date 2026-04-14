@@ -355,7 +355,7 @@ sub STEP_conf_update ($self) {
 
   my $root = $self->root;
   $self->run_cmd(
-    "set -o pipefail; make -C conf/ installfiles REALLY=1 2>&1 | tee $root/installfiles.log",
+    "set -o pipefail; make -C conf/ installfiles REALLY=1 RESTARTCORESERVICES=1 2>&1 | tee $root/installfiles.log",
     "conf installfiles",
   );
 

@@ -459,20 +459,22 @@ sub _get_my_ssh_key_file ($self, $spec) {
 async sub _wait_for_droplet_to_have_network ($self, $droplet) {
   my $max_tries = 20;
 
-  TRY: for my $try (1..$max_tries) {
-    my $ip_address = $self->_ip_address_for_droplet($droplet);
-    return 1 if $ip_address;
+  return 1 if $self->_ip_address_for_droplet($droplet);
 
+  TRY: for my $try (1..$max_tries) {
     $self->handle_log([
       "no IP address for droplet yet, will wait and try again; %s tries remain",
-      $ip_address,
       $max_tries - $try,
     ]);
 
     await $self->dobby->loop->delay_future(after => 1);
 
-    my $refetch = await $self->dobby->get_droplet_by_id($droplet->{id});
-    %$droplet = %$refetch if $refetch;
+    my $regotten_droplet = await $self->dobby->get_droplet_by_id($droplet->{id});
+
+    if ($regotten_droplet && $self->_ip_address_for_droplet($regotten_droplet)) {
+      %$droplet = %$regotten_droplet;
+      return 1;
+    }
   }
 
   return;

@@ -333,9 +333,10 @@ sub STEP_knot_update ($self) {
     die "knot diff failed, exited $exitstatus";
   }
 
+  # diffourdomains runs ME::CustomDNS updated code itself, but need to restart knot_sync to get updated code
   START("updating our domains in knot");
   $self->run_cmd(
-    "(/home/mod_perl/hm/bin/robots/knot-update-our-domains --all --really; /home/mod_perl/hm/bin/humans/fmrbl rebuild; /home/mod_perl/hm/bin/robots/update_domain_common_fastmail_flag --really) 2>&1 | tee $root/knot-update.log",
+    "(/home/mod_perl/hm/utils/Services.pl knot_sync frestart; /home/mod_perl/hm/bin/robots/knot-update-our-domains --all --really; /home/mod_perl/hm/bin/humans/fmrbl rebuild; /home/mod_perl/hm/bin/robots/update_domain_common_fastmail_flag --really) 2>&1 | tee $root/knot-update.log",
     "knot update",
   );
 }
@@ -357,6 +358,18 @@ sub STEP_conf_update ($self) {
   $self->run_cmd(
     "set -o pipefail; make -C conf/ installfiles REALLY=1 RESTARTCORESERVICE=1 2>&1 | tee $root/installfiles.log",
     "conf installfiles",
+  );
+
+  return;
+}
+
+sub STEP_htdocs_misc_install ($self) {
+  START("installing htdocs/misc");
+
+  my $root = $self->root;
+  $self->run_cmd(
+    "set -o pipefail; make -C /home/mod_perl/hm/htdocs/misc BRAND:=fastmail install 2>&1 | tee $root/htdocs-misc-install.log",
+    "htdocs/misc install",
   );
 
   return;

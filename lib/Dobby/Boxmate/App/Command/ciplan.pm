@@ -38,6 +38,7 @@ sub _template_program {
     [ switch_to_branch     => @switch_args ],
     [ debian_upgrade       => () ],
     [ conf_update          => () ],
+    [ htdocs_misc_install  => () ],
     [ db_update            => () ],
     [ knot_update          => () ],
     [ cyrus_tmpfs          => () ],

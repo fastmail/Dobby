@@ -17,6 +17,9 @@ sub opt_spec {
   return (
     [ 'run-id=s',           'CI run id, defaults to $CI_JOB_ID or a guid' ],
     [ 'include-slow-tests', 'set ME_TEST_SLOW to run slow tests' ],
+    [],
+    [ 'new-cyrus',          'build a new Cyrus during the test run' ],
+    [ 'cassandane',         'run the Cassandane test suite after newt' ],
   );
 }
 
@@ -35,10 +38,13 @@ sub _template_program ($self, $opt) {
   my $include_slow = $ENV{ME_TEST_SLOW}
                   || $opt->include_slow_tests;
 
+  my $new_cyrus   = $opt->new_cyrus   || $ENV{FM_CI_NEW_CYRUS};
+  my $cassandane  = $opt->cassandane  || $ENV{FM_CI_CASSANDANE};
+
   return [
     [ boot_up              => () ],
     [ start_early_services => () ],
-    # [ install_cyrus        => $version ],
+    ($new_cyrus ? [ install_cyrus => 'new' ] : ()),
     [ switch_to_branch     => @switch_args ],
     [ debian_upgrade       => () ],
     [ db_update            => () ],
@@ -48,7 +54,7 @@ sub _template_program ($self, $opt) {
     [ cyrus_tmpfs          => () ],
     [ start_services       => () ],
     [ newt_full            => ($include_slow ? 'slow' : ()) ],
-    # [ cassandane           => () ],
+    ($cassandane ? [ cassandane => () ] : ()),
     [ stop_services        => () ],
     [ log_gather           => () ],
   ];

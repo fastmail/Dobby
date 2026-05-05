@@ -55,7 +55,7 @@ sub execute ($self, $opt, $args) {
         -o ControlMaster=no
         -r
     ),
-    "root\@$ip:/tmp/run-" . $plan->{run_id},
+    "root\@$ip:/tmp/ci-run",
     $opt->target . "/run-$plan->{run_id}",
   );
 

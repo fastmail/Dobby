@@ -479,7 +479,7 @@ package main;
 
 my $testproc = TestProcess->new({
   run_id => $run_id,
-  root   => "/tmp/run-" . $run_id,
+  root   => "/tmp/ci-run",
 });
 
 my @instructions = $plan->{program}->@*;

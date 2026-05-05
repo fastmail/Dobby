@@ -15,11 +15,14 @@ sub command_names {
 
 sub opt_spec {
   return (
-    [ 'run-id=s', 'CI run id, defaults to $CI_JOB_ID or a guid' ],
+    [ 'run-id=s',   'CI run id, defaults to $CI_JOB_ID or a guid' ],
+    [],
+    [ 'new-cyrus',  'build a new Cyrus during the test run' ],
+    [ 'cassandane', 'run the Cassandane test suite after newt' ],
   );
 }
 
-sub _template_program {
+sub _template_program ($self, $opt) {
   my (@switch_args) = qw( fastmail/hm master );
 
   if (  $ENV{CI_MERGE_REQUEST_SOURCE_PROJECT_PATH}
@@ -31,10 +34,13 @@ sub _template_program {
     );
   }
 
+  my $new_cyrus   = $opt->new_cyrus   || $ENV{FM_CI_NEW_CYRUS};
+  my $cassandane  = $opt->cassandane  || $ENV{FM_CI_CASSANDANE};
+
   return [
     [ boot_up              => () ],
     [ start_early_services => () ],
-    # [ install_cyrus        => $version ],
+    ($new_cyrus ? [ install_cyrus => 'new' ] : ()),
     [ switch_to_branch     => @switch_args ],
     [ debian_upgrade       => () ],
     [ conf_update          => () ],
@@ -44,7 +50,7 @@ sub _template_program {
     [ cyrus_tmpfs          => () ],
     [ start_services       => () ],
     [ newt_full            => () ],
-    # [ cassandane           => () ],
+    ($cassandane ? [ cassandane => () ] : ()),
     [ stop_services        => () ],
     [ log_gather           => () ],
   ];
@@ -107,7 +113,7 @@ sub execute ($self, $opt, $args) {
     size_preferences    => $size_preferences,
     region_preferences  => $region_preferences,
     retain_droplet      => $retain_droplet,
-    program             => $self->_template_program,
+    program             => $self->_template_program($opt),
   };
 
   my $plan_filename = $args->[0] // $self->app->_default_plan_filename;

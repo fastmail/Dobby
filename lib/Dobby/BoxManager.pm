@@ -636,13 +636,15 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
     my $local_taskstream_cb = $self->_mk_taskstream();
 
     my $exitcode = await $self->_run_process_streaming(
-      [
-        $local_setup_program,
-        (join q{:}, "NAME",     $droplet->{name}),
-        (join q{:}, "LABEL",    $spec->label),
-        (join q{:}, "USERNAME", $spec->username),
-      ],
+      [ $local_setup_program ],
       $local_taskstream_cb,
+      env => {
+        %ENV,
+        FM_TASKSTREAM => 1,
+        BOX_NAME      => $droplet->{name},
+        BOX_LABEL     => $spec->label,
+        BOX_USERNAME  => $spec->username,
+      },
     );
 
     my $exit_success = ($exitcode == 0) ? 1 : 0;
@@ -695,8 +697,11 @@ async sub _run_process_streaming ($self, $command, $line_cb, %opts) {
     return 0;
   };
 
+  my @setup = $opts{env} ? (setup => [ env => $opts{env} ]) : ();
+
   my $process = IO::Async::Process->new(
     command => $command,
+    @setup,
     stdout  => { on_read => $reader },
     stderr  => { on_read => $reader },
     on_finish => sub ($proc, $exitcode) { $exit_future->done($exitcode) },

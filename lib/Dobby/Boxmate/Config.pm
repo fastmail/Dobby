@@ -47,6 +47,12 @@ has setup_switches   => (
   default => sub {  []  },
 );
 
+has local_setup_program => (
+  is  => 'ro',
+  isa => 'Str',
+  predicate => 'has_local_setup_program',
+);
+
 sub BUILDARGS ($class, @rest) {
   my %args = @rest == 1 ? $rest[0]->%* : @rest;
 

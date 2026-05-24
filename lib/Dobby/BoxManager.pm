@@ -100,6 +100,7 @@ package Dobby::BoxManager::ProvisionRequest {
   has is_default_box   => (is => 'ro', isa => 'Bool', default => 0);
   has run_custom_setup => (is => 'ro', isa => 'Bool', default => 0);
   has setup_switches   => (is => 'ro', isa => 'Maybe[ArrayRef]');
+  has local_setup_program => (is => 'ro', isa => 'Str');
 
   has run_standard_setup => (is => 'ro', isa => 'Bool', default => 1);
 
@@ -629,6 +630,46 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
   }
 
   $self->handle_message($message);
+
+  if ($spec->local_setup_program) {
+    my $local_setup_program = $spec->local_setup_program;
+    my $local_taskstream_cb = $self->_mk_taskstream();
+
+    my $exitcode = await $self->_run_process_streaming(
+      [
+        $local_setup_program,
+        (join q{:}, "NAME",     $droplet->{name}),
+        (join q{:}, "LABEL",    $spec->label),
+        (join q{:}, "USERNAME", $spec->username),
+      ],
+      $local_taskstream_cb,
+    );
+
+    my $exit_success = ($exitcode == 0) ? 1 : 0;
+    my $trailing_msg = await $local_taskstream_cb->(undef, $exit_success);
+
+    if ($exitcode != 0) {
+      $self->handle_log([
+        "result of %s: %s",
+        $local_setup_program,
+        Process::Status->new($exitcode)->as_string,
+      ]);
+      my $message = "Something went wrong with local setup for your box.";
+      if (defined $trailing_msg) {
+        $message .= " $trailing_msg";
+      }
+
+      $self->handle_message($message);
+      return;
+    }
+
+    my $message = "Box ($droplet->{name}) local setup complete!";
+    if (defined $trailing_msg) {
+      $message .= " $trailing_msg";
+    }
+
+    $self->handle_message($message);
+  }
 
   return;
 }

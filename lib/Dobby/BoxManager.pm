@@ -5,6 +5,7 @@ use v5.36.0;
 use utf8;
 
 use Carp ();
+use Dobby::Boxmate::TaskStream;
 use Dobby::Client;
 use Future::AsyncAwait;
 use IO::Async::Process;

@@ -24,10 +24,11 @@ my sub _fmt_dur ($secs) {
 
 When a box is being set up, the remote C<fmdev mysetup> script can emit
 directives mixed in with ordinary output lines.  This module provides a
-C<new_taskstream_cb> method, which returns a stateful callback suitable for use
-as a C<taskstream_cb> on L<Dobby::BoxManager>.  The callback interprets the
-directives and displays concise task-progress lines in place of the raw output
-stream.
+C<new_taskstream_cb> method, which returns a stateful callback.  Because the
+callback is stateful, it can serve only one setup phase; on L<Dobby::BoxManager>
+you supply a C<taskstream_factory> that calls C<new_taskstream_cb> to mint a
+fresh one per phase.  The callback interprets the directives and displays
+concise task-progress lines in place of the raw output stream.
 
 To get a callback:
 

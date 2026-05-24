@@ -45,18 +45,22 @@ for my $type (qw( error log message )) {
   );
 }
 
-# taskstream_cb is called repeatedly with complete-line chunks as they arrive
-# from the setup process.  When the process exits it is called once more with
-# (undef, $success_bool) to signal end-of-stream and convey the outcome.
+# taskstream_factory is a coderef called (with no arguments) to produce a fresh
+# taskstream callback for each setup phase.  Each produced callback is called
+# repeatedly with complete-line chunks as they arrive from the setup process;
+# when the process exits it is called once more with (undef, $success_bool) to
+# signal end-of-stream and convey the outcome.  A factory (rather than a single
+# callback) is required because a stateful callback can only serve one phase: a
+# second phase needs its own fresh state. -- claude, 2026-05-27
 #
 # logsnippet_cb is called once at completion (success or failure) with
 # (\$accumulated_text, { success => $bool }).
 #
 # At most, one of these may be provided.
-has taskstream_cb => (
+has taskstream_factory => (
   is        => 'ro',
   isa       => 'CodeRef',
-  predicate => 'has_taskstream_cb',
+  predicate => 'has_taskstream_factory',
 );
 
 has logsnippet_cb => (
@@ -66,8 +70,8 @@ has logsnippet_cb => (
 );
 
 sub BUILD ($self, @) {
-  if ($self->has_taskstream_cb && $self->has_logsnippet_cb) {
-    Carp::confess("BoxManager can only be given one of taskstream_cb or logsnippet_cb but both were provided");
+  if ($self->has_taskstream_factory && $self->has_logsnippet_cb) {
+    Carp::confess("BoxManager can only be given one of taskstream_factory or logsnippet_cb but both were provided");
   }
 }
 
@@ -536,6 +540,13 @@ async sub _wait_for_ssh_up ($self, $ip_address) {
   return $success;
 }
 
+# Each call returns a *fresh* taskstream callback, so every setup phase
+# (currently: remote setup, then optional local setup) gets its own state.  An
+# earlier version reused a single caller-supplied callback for every phase,
+# which was fine for a stateless cb but left a stateful cb (e.g. a real
+# TaskStream-generated one) with prelude_permitted already consumed and a
+# second on_eos arriving on the prior end-of-stream's state.  Taking a factory
+# rather than a callback is what defuses that. -- claude, 2026-05-27
 sub _mk_taskstream ($self) {
   if ($self->has_logsnippet_cb) {
     # Only logsnippet_cb: synthesize a streaming callback around it.
@@ -547,8 +558,8 @@ sub _mk_taskstream ($self) {
     };
   }
 
-  if ($self->has_taskstream_cb) {
-    return $self->taskstream_cb;
+  if ($self->has_taskstream_factory) {
+    return $self->taskstream_factory->();
   }
 
   return Dobby::Boxmate::TaskStream->new_taskstream_cb({

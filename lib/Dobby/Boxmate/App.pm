@@ -52,9 +52,11 @@ sub boxman ($self, %opts) {
     message_cb    => sub ($msg) { say "🔹 $msg" },
 
     ($opts{verbose_setup}
-      ? (taskstream_cb => sub ($line, @) {
-          print $line if defined $line;
-          return Future->done;
+      ? (taskstream_factory => sub {
+          return sub ($line, @) {
+            print $line if defined $line;
+            return Future->done;
+          };
         })
       : ()),
   });

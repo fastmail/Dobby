@@ -66,14 +66,8 @@ sub snapshot_for_version_fail_ok ($version, $expect, $description) {
 }
 
 new_boxman_fail_ok(
-  {},
-  re(qr/requires one of taskstream_cb or logsnippet_cb but neither/),
-  'BoxManager requires at least one stream callback',
-);
-
-new_boxman_fail_ok(
   { taskstream_cb => sub { }, logsnippet_cb => sub { } },
-  re(qr/requires one of taskstream_cb or logsnippet_cb but both/),
+  re(qr/one of taskstream_cb or logsnippet_cb but both were provided/),
   'BoxManager rejects both stream callbacks at once',
 );
 

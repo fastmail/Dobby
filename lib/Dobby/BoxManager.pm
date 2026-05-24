@@ -51,7 +51,7 @@ for my $type (qw( error log message )) {
 # logsnippet_cb is called once at completion (success or failure) with
 # (\$accumulated_text, { success => $bool }).
 #
-# Exactly one of these must be provided; see BUILD.
+# At most, one of these may be provided.
 has taskstream_cb => (
   is        => 'ro',
   isa       => 'CodeRef',
@@ -65,12 +65,8 @@ has logsnippet_cb => (
 );
 
 sub BUILD ($self, @) {
-  unless ($self->has_taskstream_cb || $self->has_logsnippet_cb) {
-    Carp::confess("BoxManager requires one of taskstream_cb or logsnippet_cb but neither was provided");
-  }
-
   if ($self->has_taskstream_cb && $self->has_logsnippet_cb) {
-    Carp::confess("BoxManager requires one of taskstream_cb or logsnippet_cb but both were provided");
+    Carp::confess("BoxManager can only be given one of taskstream_cb or logsnippet_cb but both were provided");
   }
 }
 
@@ -538,6 +534,26 @@ async sub _wait_for_ssh_up ($self, $ip_address) {
   return $success;
 }
 
+sub _mk_taskstream ($self) {
+  if ($self->has_logsnippet_cb) {
+    # Only logsnippet_cb: synthesize a streaming callback around it.
+
+    my $buffer = '';
+    return sub ($line, $success = undef) {
+      if (defined $line) { $buffer .= $line }
+      else               { $self->logsnippet_cb->(\$buffer, { success => $success }) }
+    };
+  }
+
+  if ($self->has_taskstream_cb) {
+    return $self->taskstream_cb;
+  }
+
+  return Dobby::Boxmate::TaskStream->new_taskstream_cb({
+    loop => $self->dobby->loop,
+  });
+}
+
 async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
   my $ip_address = $self->_ip_address_for_droplet($droplet);
 
@@ -585,18 +601,7 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
 
   $self->handle_log([ "about to run ssh: %s", \@ssh_command ]);
 
-  my $taskstream_cb;
-  if ($self->has_taskstream_cb) {
-    $taskstream_cb = $self->taskstream_cb;
-  } else {
-    # Only logsnippet_cb: synthesize a streaming callback around it.
-
-    my $buffer = '';
-    $taskstream_cb = sub ($line, $success = undef) {
-      if (defined $line) { $buffer .= $line }
-      else               { $self->logsnippet_cb->(\$buffer, { success => $success }) }
-    };
-  }
+  my $taskstream_cb = $self->_mk_taskstream;
 
   my $exitcode = await $self->_run_process_streaming(
     \@ssh_command,

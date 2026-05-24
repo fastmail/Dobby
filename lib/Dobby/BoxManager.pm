@@ -611,17 +611,19 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
   my $exit_success = ($exitcode == 0) ? 1 : 0;
   my $trailing_msg = await $taskstream_cb->(undef, $exit_success);  # end-of-stream sentinel
 
-  $self->handle_log([ "result of ssh: %s", Process::Status->new($exitcode)->as_string ]);
+  if ($exitcode != 0) {
+    $self->handle_log([ "result of ssh: %s", Process::Status->new($exitcode)->as_string ]);
 
-  my $message;
+    my $message = "Something went wrong setting up your box.";
+    if (defined $trailing_msg) {
+      $message .= " $trailing_msg";
+    }
 
-  if ($exitcode == 0) {
-    $message = $spec->run_custom_setup ? "Box ($droplet->{name}) is now set up!"
-                                       : "Box ($droplet->{name}) is ready!";
-  } else {
-    $message = "Something went wrong setting up your box.";
+    $self->handle_message($message);
+    return;
   }
 
+  my $message = "Box ($droplet->{name}) remote setup complete!";
   if (defined $trailing_msg) {
     $message .= " $trailing_msg";
   }

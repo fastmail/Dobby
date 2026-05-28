@@ -5,6 +5,7 @@ use v5.36.0;
 use utf8;
 
 use Carp ();
+use Dobby::Boxmate::TaskStream;
 use Dobby::Client;
 use Future::AsyncAwait;
 use IO::Async::Process;
@@ -44,18 +45,22 @@ for my $type (qw( error log message )) {
   );
 }
 
-# taskstream_cb is called repeatedly with complete-line chunks as they arrive
-# from the setup process.  When the process exits it is called once more with
-# (undef, $success_bool) to signal end-of-stream and convey the outcome.
+# taskstream_factory is a coderef called (with no arguments) to produce a fresh
+# taskstream callback for each setup phase.  Each produced callback is called
+# repeatedly with complete-line chunks as they arrive from the setup process;
+# when the process exits it is called once more with (undef, $success_bool) to
+# signal end-of-stream and convey the outcome.  A factory (rather than a single
+# callback) is required because a stateful callback can only serve one phase: a
+# second phase needs its own fresh state. -- claude, 2026-05-27
 #
 # logsnippet_cb is called once at completion (success or failure) with
 # (\$accumulated_text, { success => $bool }).
 #
-# Exactly one of these must be provided; see BUILD.
-has taskstream_cb => (
+# At most, one of these may be provided.
+has taskstream_factory => (
   is        => 'ro',
   isa       => 'CodeRef',
-  predicate => 'has_taskstream_cb',
+  predicate => 'has_taskstream_factory',
 );
 
 has logsnippet_cb => (
@@ -65,12 +70,8 @@ has logsnippet_cb => (
 );
 
 sub BUILD ($self, @) {
-  unless ($self->has_taskstream_cb || $self->has_logsnippet_cb) {
-    Carp::confess("BoxManager requires one of taskstream_cb or logsnippet_cb but neither was provided");
-  }
-
-  if ($self->has_taskstream_cb && $self->has_logsnippet_cb) {
-    Carp::confess("BoxManager requires one of taskstream_cb or logsnippet_cb but both were provided");
+  if ($self->has_taskstream_factory && $self->has_logsnippet_cb) {
+    Carp::confess("BoxManager can only be given one of taskstream_factory or logsnippet_cb but both were provided");
   }
 }
 
@@ -104,6 +105,7 @@ package Dobby::BoxManager::ProvisionRequest {
   has is_default_box   => (is => 'ro', isa => 'Bool', default => 0);
   has run_custom_setup => (is => 'ro', isa => 'Bool', default => 0);
   has setup_switches   => (is => 'ro', isa => 'Maybe[ArrayRef]');
+  has local_setup_program => (is => 'ro', isa => 'Str');
 
   has run_standard_setup => (is => 'ro', isa => 'Bool', default => 1);
 
@@ -538,6 +540,33 @@ async sub _wait_for_ssh_up ($self, $ip_address) {
   return $success;
 }
 
+# Each call returns a *fresh* taskstream callback, so every setup phase
+# (currently: remote setup, then optional local setup) gets its own state.  An
+# earlier version reused a single caller-supplied callback for every phase,
+# which was fine for a stateless cb but left a stateful cb (e.g. a real
+# TaskStream-generated one) with prelude_permitted already consumed and a
+# second on_eos arriving on the prior end-of-stream's state.  Taking a factory
+# rather than a callback is what defuses that. -- claude, 2026-05-27
+sub _mk_taskstream ($self) {
+  if ($self->has_logsnippet_cb) {
+    # Only logsnippet_cb: synthesize a streaming callback around it.
+
+    my $buffer = '';
+    return sub ($line, $success = undef) {
+      if (defined $line) { $buffer .= $line }
+      else               { $self->logsnippet_cb->(\$buffer, { success => $success }) }
+    };
+  }
+
+  if ($self->has_taskstream_factory) {
+    return $self->taskstream_factory->();
+  }
+
+  return Dobby::Boxmate::TaskStream->new_taskstream_cb({
+    loop => $self->dobby->loop,
+  });
+}
+
 async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
   my $ip_address = $self->_ip_address_for_droplet($droplet);
 
@@ -585,18 +614,7 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
 
   $self->handle_log([ "about to run ssh: %s", \@ssh_command ]);
 
-  my $taskstream_cb;
-  if ($self->has_taskstream_cb) {
-    $taskstream_cb = $self->taskstream_cb;
-  } else {
-    # Only logsnippet_cb: synthesize a streaming callback around it.
-
-    my $buffer = '';
-    $taskstream_cb = sub ($line, $success = undef) {
-      if (defined $line) { $buffer .= $line }
-      else               { $self->logsnippet_cb->(\$buffer, { success => $success }) }
-    };
-  }
+  my $taskstream_cb = $self->_mk_taskstream;
 
   my $exitcode = await $self->_run_process_streaming(
     \@ssh_command,
@@ -606,22 +624,66 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
   my $exit_success = ($exitcode == 0) ? 1 : 0;
   my $trailing_msg = await $taskstream_cb->(undef, $exit_success);  # end-of-stream sentinel
 
-  $self->handle_log([ "result of ssh: %s", Process::Status->new($exitcode)->as_string ]);
+  if ($exitcode != 0) {
+    $self->handle_log([ "result of ssh: %s", Process::Status->new($exitcode)->as_string ]);
 
-  my $message;
+    my $message = "Something went wrong setting up your box.";
+    if (defined $trailing_msg) {
+      $message .= " $trailing_msg";
+    }
 
-  if ($exitcode == 0) {
-    $message = $spec->run_custom_setup ? "Box ($droplet->{name}) is now set up!"
-                                       : "Box ($droplet->{name}) is ready!";
-  } else {
-    $message = "Something went wrong setting up your box.";
+    $self->handle_message($message);
+    return;
   }
 
+  my $message = "Box ($droplet->{name}) remote setup complete!";
   if (defined $trailing_msg) {
     $message .= " $trailing_msg";
   }
 
   $self->handle_message($message);
+
+  if ($spec->local_setup_program) {
+    my $local_setup_program = $spec->local_setup_program;
+    my $local_taskstream_cb = $self->_mk_taskstream();
+
+    my $exitcode = await $self->_run_process_streaming(
+      [ $local_setup_program ],
+      $local_taskstream_cb,
+      env => {
+        %ENV,
+        FM_TASKSTREAM => 1,
+        BOX_NAME      => $droplet->{name},
+        BOX_LABEL     => $spec->label,
+        BOX_USERNAME  => $spec->username,
+      },
+    );
+
+    my $exit_success = ($exitcode == 0) ? 1 : 0;
+    my $trailing_msg = await $local_taskstream_cb->(undef, $exit_success);
+
+    if ($exitcode != 0) {
+      $self->handle_log([
+        "result of %s: %s",
+        $local_setup_program,
+        Process::Status->new($exitcode)->as_string,
+      ]);
+      my $message = "Something went wrong with local setup for your box.";
+      if (defined $trailing_msg) {
+        $message .= " $trailing_msg";
+      }
+
+      $self->handle_message($message);
+      return;
+    }
+
+    my $message = "Box ($droplet->{name}) local setup complete!";
+    if (defined $trailing_msg) {
+      $message .= " $trailing_msg";
+    }
+
+    $self->handle_message($message);
+  }
 
   return;
 }
@@ -647,8 +709,11 @@ async sub _run_process_streaming ($self, $command, $line_cb, %opts) {
     return 0;
   };
 
+  my @setup = $opts{env} ? (setup => [ env => $opts{env} ]) : ();
+
   my $process = IO::Async::Process->new(
     command => $command,
+    @setup,
     stdout  => { on_read => $reader },
     stderr  => { on_read => $reader },
     on_finish => sub ($proc, $exitcode) { $exit_future->done($exitcode) },

@@ -47,6 +47,12 @@ sub new_boxman_fail_ok ($extra, $expect, $description) {
   cmp_deeply($@, $expect, $description);
 }
 
+sub mk_taskstream_ok ($extra, $description) {
+  local $Test::Builder::Level = $Test::Builder::Level + 1;
+  my $boxman = Dobby::BoxManager->new(dobby => make_dobby(), %base, %$extra);
+  is(ref $boxman->_mk_taskstream, 'CODE', $description);
+}
+
 sub snapshot_for_version_ok ($version, $expect, $description) {
   local $Test::Builder::Level = $Test::Builder::Level + 1;
   my $dobby = make_dobby();
@@ -66,16 +72,30 @@ sub snapshot_for_version_fail_ok ($version, $expect, $description) {
 }
 
 new_boxman_fail_ok(
-  {},
-  re(qr/requires one of taskstream_cb or logsnippet_cb but neither/),
-  'BoxManager requires at least one stream callback',
-);
-
-new_boxman_fail_ok(
-  { taskstream_cb => sub { }, logsnippet_cb => sub { } },
-  re(qr/requires one of taskstream_cb or logsnippet_cb but both/),
+  { taskstream_factory => sub { }, logsnippet_cb => sub { } },
+  re(qr/one of taskstream_factory or logsnippet_cb but both were provided/),
   'BoxManager rejects both stream callbacks at once',
 );
+
+mk_taskstream_ok(
+  {},
+  'BoxManager with neither stream cb synthesizes a taskstream callback',
+);
+
+subtest 'taskstream_factory is called fresh for each phase' => sub {
+  my $calls = 0;
+  my $boxman = Dobby::BoxManager->new(
+    dobby => make_dobby(),
+    %base,
+    taskstream_factory => sub { my $n = ++$calls; return sub { $n } },
+  );
+
+  my $first  = $boxman->_mk_taskstream;
+  my $second = $boxman->_mk_taskstream;
+
+  is($calls, 2, 'factory was invoked once per _mk_taskstream call');
+  isnt($first, $second, 'each phase gets a distinct callback');
+};
 
 snapshot_for_version_ok(
   '1.0',

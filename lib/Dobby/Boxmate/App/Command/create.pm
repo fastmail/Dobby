@@ -112,6 +112,10 @@ sub execute ($self, $opt, $args) {
     run_custom_setup => $opt->custom_setup,
     setup_switches   => [ @setup_args ],
 
+    ($config->has_local_setup_program
+      ? (local_setup_program => $config->local_setup_program)
+      : ()),
+
     ($config->has_ssh_key_id ? (ssh_key_id  => $config->ssh_key_id) : ()),
     digitalocean_ssh_key_name => $config->digitalocean_ssh_key_name,
 

@@ -42,10 +42,6 @@ sub boxman ($self, %opts) {
 
   $self->_loop->add($dobby);
 
-  my $taskstream_cb = $opts{verbose_setup}
-    ? sub ($line, @) { print $line if defined $line }
-    : Dobby::Boxmate::TaskStream->new_taskstream_cb({ loop => $self->_loop });
-
   my $config = $self->config;
   $self->{_boxman} = Dobby::BoxManager->new({
     dobby       => $dobby,
@@ -54,7 +50,15 @@ sub boxman ($self, %opts) {
     error_cb      => sub ($err) { die "❌ $err\n" },
     log_cb        => sub ($log) { say "🔸 " . String::Flogger->flog($log) },
     message_cb    => sub ($msg) { say "🔹 $msg" },
-    taskstream_cb => $taskstream_cb,
+
+    ($opts{verbose_setup}
+      ? (taskstream_factory => sub {
+          return sub ($line, @) {
+            print $line if defined $line;
+            return Future->done;
+          };
+        })
+      : ()),
   });
 }
 

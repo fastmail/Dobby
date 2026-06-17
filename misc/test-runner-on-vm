@@ -431,6 +431,9 @@ sub STEP_cassandane ($self, @args) {
 
   my $root = $self->root;
 
+  # Temp hack, don't let security get in the way of testing
+  $self->run_cmd("sudo aa-disable /etc/apparmor.d/cyrus");
+
   my $cmd = join q{ && },
     qq{set -o pipefail},
     qq{set -x},

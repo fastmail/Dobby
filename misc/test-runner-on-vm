@@ -153,6 +153,24 @@ sub run_cmd ($self, $cmd, $desc = $cmd, $arg = undef) {
   return $ps->exitstatus;
 }
 
+sub hook_before ($self, $name) {
+  my $name = "/home/mod_perl/hm/bin/ci/hook-before-$name";
+  return unless -e $name;
+
+  if (-e $name) {
+    my $rc = $self->run_cmd($cmd, "hook-before-$name", { on_fail => 'ignore' });
+  }
+}
+
+sub hook_after ($self, $name) {
+  my $name = "/home/mod_perl/hm/bin/ci/hook-after-$name";
+  return unless -e $name;
+
+  if (-e $name) {
+    my $rc = $self->run_cmd($cmd, "hook-after-$name", { on_fail => 'ignore' });
+  }
+}
+
 sub STEP_boot_up ($self) {
   my $user = `whoami`;
   START("initializing testrunner, running as $user");
@@ -497,7 +515,19 @@ for my $instruction (@instructions) {
     die "Test runner has no implementation for $name step\n";
   }
 
-  $testproc->$method(@args);
+  $testproc->hook_before($name);
+
+  {
+    my $name = "/home/mod_perl/hm/bin/ci/hook-instead-$name";
+
+    if (-e $name) {
+      $self->run_cmd($cmd, "hook-instead-$name");
+    } else {
+      $testproc->$method(@args);
+    }
+  }
+
+  $testproc->hook_after($name);
 }
 
 FINISH_CURR();

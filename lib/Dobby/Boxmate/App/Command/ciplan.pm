@@ -64,7 +64,7 @@ sub execute ($self, $opt, $args) {
 
   # For all the predefined variables, check out:
   # https://docs.gitlab.com/ci/variables/predefined_variables/
-  for my $required (qw( DIGITAL_OCEAN_TOKEN )) {
+  for my $required (qw( DIGITALOCEAN_TOKEN )) {
     unless ($ENV{ $required }) {
       die "Can't initialize a CI run without the $required variable\n";
     }

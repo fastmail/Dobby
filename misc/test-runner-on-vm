@@ -455,7 +455,7 @@ sub STEP_cassandane ($self, @args) {
   return;
 }
 
-sub STEP_log_gather ($self) {
+sub gather_logs ($self) {
   START("gathering logs");
 
   my $root = $self->root;
@@ -487,20 +487,30 @@ my $testproc = TestProcess->new({
 
 my @instructions = $plan->{program}->@*;
 
-for my $instruction (@instructions) {
-  my ($name, @args) = @$instruction;
+eval {
+  for my $instruction (@instructions) {
+    my ($name, @args) = @$instruction;
 
-  my $method = "STEP_$name";
+    my $method = "STEP_$name";
 
-  unless ($testproc->can($method)) {
-    # XXX: validate all this before starting any work!
-    die "Test runner has no implementation for $name step\n";
+    unless ($testproc->can($method)) {
+      # XXX: validate all this before starting any work!
+      die "Test runner has no implementation for $name step\n";
+    }
+
+    $testproc->$method(@args);
   }
+};
 
-  $testproc->$method(@args);
-}
+my $error = $@;
 
 FINISH_CURR();
+
+$self->gather_logs;
+
+if ($error) {
+  die $error;
+}
 
 if ($testproc->is_passing) {
   say "All tests successful!";

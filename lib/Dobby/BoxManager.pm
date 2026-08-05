@@ -459,7 +459,7 @@ sub _get_my_ssh_key_file ($self, $spec) {
 }
 
 async sub _wait_for_droplet_to_have_network ($self, $droplet) {
-  my $max_tries = 20;
+  my $max_tries = 60;
 
   return 1 if $self->_ip_address_for_droplet($droplet);
 
@@ -488,7 +488,7 @@ async sub _wait_for_ssh_up ($self, $ip_address) {
   }
 
   my $success;
-  my $max_tries = 20;
+  my $max_tries = 60;
   TRY: for my $try (1..$max_tries) {
     my $socket;
     eval {

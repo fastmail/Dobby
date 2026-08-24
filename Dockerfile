@@ -14,6 +14,7 @@ apt-get install -y --no-install-recommends  \
   libapp-cmd-perl \
   libboolean-perl \
   libdata-guid-perl \
+  libdatetime-format-rfc3339-perl \
   libfuture-perl \
   libfuture-asyncawait-perl \
   libio-async-perl \

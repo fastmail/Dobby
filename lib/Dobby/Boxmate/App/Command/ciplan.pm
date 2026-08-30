@@ -46,7 +46,6 @@ sub _template_program {
     [ newt_full            => () ],
     # [ cassandane           => () ],
     [ stop_services        => () ],
-    [ log_gather           => () ],
   ];
 }
 

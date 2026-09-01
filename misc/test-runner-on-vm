@@ -379,11 +379,21 @@ sub STEP_newt_full ($self, @args) {
   START("running Newt", 1);
   my $root = $self->root;
 
-  my @tests = @args;
+  my %opt;
+  my @tests;
+
+  while (my $next = shift @args) {
+    last if $next eq '--';
+    $opt{$next} = 1;
+  }
+
+  while (my $next = shift @args) {
+    push @tests, $next;
+  }
 
   # Test slow things
   my $yath_env = join(" ",
-    "ME_TEST_SLOW=1",
+    ($opt{slow} ? "ME_TEST_SLOW=1" : ()),
     "AUTOMATED_TESTING=DAILY",
     "JUNIT_TEST_FILE=$root/yath-output.xml",
     "ME_LOG_TESTIDENT=yath",

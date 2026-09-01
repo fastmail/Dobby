@@ -15,11 +15,12 @@ sub command_names {
 
 sub opt_spec {
   return (
-    [ 'run-id=s', 'CI run id, defaults to $CI_JOB_ID or a guid' ],
+    [ 'run-id=s',           'CI run id, defaults to $CI_JOB_ID or a guid' ],
+    [ 'include-slow-tests', 'set ME_TEST_SLOW to run slow tests' ],
   );
 }
 
-sub _template_program {
+sub _template_program ($self, $opt) {
   my (@switch_args) = qw( fastmail/hm master );
 
   if (  $ENV{CI_MERGE_REQUEST_SOURCE_PROJECT_PATH}
@@ -30,6 +31,9 @@ sub _template_program {
       $ENV{CI_MERGE_REQUEST_SOURCE_BRANCH_NAME},
     );
   }
+
+  my $include_slow = $ENV{ME_TEST_SLOW}
+                  || $opt->include_slow_tests;
 
   return [
     [ boot_up              => () ],
@@ -43,7 +47,7 @@ sub _template_program {
     [ knot_update          => () ],
     [ cyrus_tmpfs          => () ],
     [ start_services       => () ],
-    [ newt_full            => () ],
+    [ newt_full            => ($include_slow ? 'slow' : ()) ],
     # [ cassandane           => () ],
     [ stop_services        => () ],
     [ log_gather           => () ],
@@ -107,7 +111,7 @@ sub execute ($self, $opt, $args) {
     size_preferences    => $size_preferences,
     region_preferences  => $region_preferences,
     retain_droplet      => $retain_droplet,
-    program             => $self->_template_program,
+    program             => $self->_template_program($opt),
   };
 
   my $plan_filename = $args->[0] // $self->app->_default_plan_filename;

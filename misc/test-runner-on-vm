@@ -379,17 +379,21 @@ sub STEP_newt_full ($self, @args) {
   START("running Newt", 1);
   my $root = $self->root;
 
-  my %opt;
-  my @tests;
+  my %is_valid_opt = map {; $_ => 1 } qw( slow );
 
-  while (my $next = shift @args) {
+  my %opt;
+
+  while (defined(my $next = shift @args)) {
     last if $next eq '--';
+
+    unless ($is_valid_opt{$next}) {
+      die "The newt_full step has no option named $next\n";
+    }
+
     $opt{$next} = 1;
   }
 
-  while (my $next = shift @args) {
-    push @tests, $next;
-  }
+  my @tests = @args;
 
   # Test slow things
   my $yath_env = join(" ",

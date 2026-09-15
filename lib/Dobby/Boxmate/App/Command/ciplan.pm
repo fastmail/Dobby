@@ -19,7 +19,7 @@ sub opt_spec {
     [ 'include-slow-tests', 'set ME_TEST_SLOW to run slow tests' ],
     [],
     [ 'newt!',              'run newt (on by default)', { default => 1 } ],
-    [ 'new-cyrus',          'build a new Cyrus during the test run' ],
+    [ 'cyrus=s',            'install a different Cyrus; "new" to mint a new one' ],
     [ 'cassandane',         'run the Cassandane test suite after newt' ],
   );
 }
@@ -39,14 +39,14 @@ sub _template_program ($self, $opt) {
   my $include_slow = $ENV{ME_TEST_SLOW}
                   || $opt->include_slow_tests;
 
-  my $new_cyrus   = $opt->new_cyrus   // $ENV{FM_CI_NEW_CYRUS};
+  my $cyrus       = $opt->cyrus       // $ENV{FM_CI_CYRUS};
   my $cassandane  = $opt->cassandane  // $ENV{FM_CI_CASSANDANE};
   my $newt        = $opt->newt        // $ENV{FM_CI_CASSANDANE} // 1;
 
   return [
     [ boot_up              => () ],
     [ start_early_services => () ],
-    ($new_cyrus ? [ install_cyrus => 'new' ] : ()),
+    ($cyrus ? [ install_cyrus => $cyrus ] : ()),
     [ switch_to_branch     => @switch_args ],
     [ debian_upgrade       => () ],
     [ db_update            => () ],

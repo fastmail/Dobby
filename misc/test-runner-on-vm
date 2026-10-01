@@ -124,6 +124,7 @@ sub run_cmd ($self, $cmd, $desc = $cmd, $arg = undef) {
     slug    => $desc || $cmd,
     command => $cmd,
     took    => 0 + sprintf('%.2f', $time),
+    on_fail => $on_fail,
     result  => $ps->as_struct,
   });
 

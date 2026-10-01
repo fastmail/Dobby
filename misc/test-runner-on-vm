@@ -448,6 +448,13 @@ sub STEP_cassandane ($self, @args) {
   # Temp hack, don't let security get in the way of testing
   $self->run_cmd("sudo aa-disable /etc/apparmor.d/cyrus");
 
+  # Cassandane does IPv6 tests and needs IPv6 allowed
+  $self->run_cmd("ip6tables -P INPUT ACCEPT");
+  $self->run_cmd("ip6tables -P OUTPUT ACCEPT");
+
+  # Cassandane does core dump tests and needs this to find the dump files
+  $self->run_cmd("sysctl kernel.core_pattern=core.%p");
+
   my $cmd = join q{ && },
     qq{set -o pipefail},
     qq{set -x},

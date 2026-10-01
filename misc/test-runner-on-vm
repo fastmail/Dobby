@@ -469,7 +469,7 @@ sub STEP_cassandane ($self, @args) {
   $self->run_cmd($cmd, "cassandane", { on_fail => 'mark_failing' });
 
   $self->run_cmd(
-    "cp -r $cass_workdir/cyrus-imapd/cassandane/reports $root/cass_reports",
+    "cp -r /dev/shm/cass/reports $root/cass_reports",
     "cp reports",
   );
 

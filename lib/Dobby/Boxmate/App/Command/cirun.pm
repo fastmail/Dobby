@@ -91,7 +91,7 @@ sub execute ($self, $opt, $args) {
 
   $cb->(undef, $exitcode == 0 ? 1 : 0);
 
-  exit($exitcode >> 8) if $exitcode;
+  exit(($exitcode >> 8) || 1) if $exitcode;
 }
 
 1;

@@ -495,6 +495,15 @@ sub STEP_log_gather ($self) {
 
   $self->run_cmd($cmd, 'lg', { on_fail => 'ignore' });
 
+  $self->write_events_file;
+
+  say "Gathered in $root:";
+  system "find", "$root", "-type", "f";
+}
+
+sub write_events_file ($self) {
+  my $root = $self->root;
+
   Path::Tiny::path("$root/events.json")->spew_utf8(
     JSON::XS->new->pretty->canonical->encode({
       $self->run_data->%*,
@@ -502,8 +511,7 @@ sub STEP_log_gather ($self) {
     }),
   );
 
-  say "Gathered in $root:";
-  system "find", "$root", "-type", "f";
+  return;
 }
 
 package main;
@@ -525,7 +533,19 @@ for my $instruction (@instructions) {
     die "Test runner has no implementation for $name step\n";
   }
 
-  $testproc->$method(@args);
+  my $ok = eval { $testproc->$method(@args); 1 };
+
+  unless ($ok) {
+    my $error = $@ || "(unknown error)";
+
+    # A step that dies skips log_gather, which is where events.json is
+    # normally written.  The CI report relies on that file.  Write it now,
+    # noting what killed us, then go ahead and die already.
+    $testproc->run_data->{fatal_error} = { step => $name, error => "$error" };
+    eval { $testproc->write_events_file };
+
+    die $error;
+  }
 }
 
 FINISH_CURR();

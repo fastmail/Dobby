@@ -413,17 +413,38 @@ sub STEP_newt_full ($self, @args) {
     --renderer=JUnit
   );
 
-  my $cmd = join q{ ; },
+  my $log_file = "$root/test-results.jsonl.bz2";
+
+  my $setup = join q{ ; },
     qq{source /etc/fmhome/bashrc},
     qq{penv},
-    qq{cd /home/mod_perl/hm},
-    qq{$yath_env yath test $yath_opts --log-file $root/test-results @tests};
+    qq{cd /home/mod_perl/hm};
 
   $self->run_cmd(
-    "bash -c '$cmd'",
+    "bash -c '$setup ; $yath_env yath test $yath_opts --log-file $log_file @tests'",
     "yath",
     { on_fail => 'mark_failing' },
   );
+
+  START("summarizing yath results");
+
+  unless (-e $log_file) {
+    ERROR("yath did not produce a log file");
+    return;
+  }
+
+  $self->run_cmd(
+    "bash -c '$setup ; yath failed $log_file --brief | sort > $root/newt_failures'",
+    "yath failed",
+    { on_fail => 'ignore' },
+  );
+
+  my $replay = `bash -c '$setup ; yath replay $log_file 2>&1'`;
+  my ($file_count) = $replay =~ /File Count:\s*([0-9]+)/;
+
+  $self->run_data->{newt} = { file_count => $file_count };
+
+  return;
 }
 
 sub STEP_cassandane ($self, @args) {

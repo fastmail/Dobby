@@ -46,8 +46,8 @@ sub _template_program ($self, $opt) {
   return [
     [ boot_up              => () ],
     [ start_early_services => () ],
-    ($cyrus ? [ install_cyrus => $cyrus ] : ()),
     [ switch_to_branch     => @switch_args ],
+    ($cyrus ? [ install_cyrus => $cyrus ] : ()),
     [ debian_upgrade       => () ],
     [ db_update            => () ],
     [ conf_update          => () ],

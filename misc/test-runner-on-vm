@@ -462,7 +462,7 @@ sub STEP_cassandane ($self, @args) {
     qq{fmdev cass --allow-root --working-dir $cass_workdir 2>&1 | tee $root/fmdev-cass.log},
     qq{cd cyrus-imapd/cassandane},
     qq{chown cyrus .},
-    qq{sudo -u cyrus env PERL5LIB=/home/mod_perl/hm:\$PERL5LIB ./testrunner.pl --config $cass_workdir/cassandane.ini $cass_args 2>&1 | tee $root/cassandane.log};
+    qq{sudo -u cyrus env PERL5LIB=/home/mod_perl/hm:\$PERL5LIB ./testrunner.pl --jobs 6 --config $cass_workdir/cassandane.ini $cass_args 2>&1 | tee $root/cassandane.log};
 
   $cmd = "bash -c '$cmd'";
 

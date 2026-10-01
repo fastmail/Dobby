@@ -304,6 +304,12 @@ sub STEP_switch_to_branch ($self, $project_path, $branch) {
 
   say "Resetting hard to $remote/$branch";
   $self->run_cmd("git reset --quiet --hard $remote/$branch");
+
+  my $hm_head = `git rev-parse HEAD`;
+  chomp $hm_head;
+  $self->run_data->{hm_head} = $hm_head;
+  say "Now testing commit $hm_head";
+
   return;
 }
 

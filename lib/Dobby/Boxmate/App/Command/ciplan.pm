@@ -18,7 +18,7 @@ sub opt_spec {
     [ 'run-id=s',           'CI run id, defaults to $CI_JOB_ID or a guid' ],
     [ 'include-slow-tests', 'set ME_TEST_SLOW to run slow tests' ],
     [],
-    [ 'newt!',              'run newt (on by default)', { default => 1 } ],
+    [ 'newt!',              'run newt (on by default)' ],
     [ 'cyrus=s',            'install a different Cyrus; "new" to mint a new one' ],
     [ 'cassandane',         'run the Cassandane test suite after newt' ],
   );
@@ -41,7 +41,7 @@ sub _template_program ($self, $opt) {
 
   my $cyrus       = $opt->cyrus       // $ENV{FM_CI_CYRUS};
   my $cassandane  = $opt->cassandane  // $ENV{FM_CI_CASSANDANE};
-  my $newt        = $opt->newt        // $ENV{FM_CI_CASSANDANE} // 1;
+  my $newt        = $opt->newt        // $ENV{FM_CI_NEWT}       // 1;
 
   return [
     [ boot_up              => () ],

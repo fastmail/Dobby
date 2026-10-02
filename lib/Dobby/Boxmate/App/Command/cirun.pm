@@ -91,7 +91,10 @@ sub execute ($self, $opt, $args) {
 
   $cb->(undef, $exitcode == 0 ? 1 : 0);
 
-  exit($exitcode >> 8) if $exitcode;
+  # The exit status might be 0, even on a signal.  We don't want to exit 0 if
+  # the program exited weird, so: exit on the program's code if it was nonzero;
+  # otherwise, if we got signal, exit 1; otherwise, 0!
+  exit(($exitcode >> 8) || 1) if $exitcode;
 }
 
 1;

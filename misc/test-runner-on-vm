@@ -124,6 +124,7 @@ sub run_cmd ($self, $cmd, $desc = $cmd, $arg = undef) {
     slug    => $desc || $cmd,
     command => $cmd,
     took    => 0 + sprintf('%.2f', $time),
+    on_fail => $on_fail,
     result  => $ps->as_struct,
   });
 
@@ -171,6 +172,10 @@ sub STEP_boot_up ($self) {
   chomp $box_version;
   $self->run_data->{box_version} = $box_version;
   say "Building on fminabox.version $box_version";
+
+  my $cyrus_version = $self->_installed_cyrus_version;
+  $self->run_data->{cyrus_version} = $cyrus_version;
+  say "Starting with Cyrus $cyrus_version";
 
   $self->run_cmd(
     "ssh-keyscan box-fastmail-01 box-fastmail-01.internal >> ~/.ssh/known_hosts",
@@ -239,10 +244,13 @@ sub STEP_install_cyrus ($self, $version) {
   );
 
   START("checking Cyrus version");
-  my $reported_version = `fmcyrpkg versions | grep fm | head -n1 | awk '{printf \$2}'`;
-  chomp $reported_version;
+  $self->run_data->{cyrus_version} = $self->_installed_cyrus_version;
+}
 
-  $self->run_data->{cyrus_version} = $reported_version;
+sub _installed_cyrus_version ($self) {
+  my $version = `fmcyrpkg versions | grep fm | head -n1 | awk '{printf \$2}'`;
+  chomp $version;
+  return $version;
 }
 
 sub STEP_debian_upgrade ($self) {
@@ -304,6 +312,12 @@ sub STEP_switch_to_branch ($self, $project_path, $branch) {
 
   say "Resetting hard to $remote/$branch";
   $self->run_cmd("git reset --quiet --hard $remote/$branch");
+
+  my $hm_head = `git rev-parse HEAD`;
+  chomp $hm_head;
+  $self->run_data->{hm_head} = $hm_head;
+  say "Now testing commit $hm_head";
+
   return;
 }
 
@@ -413,17 +427,38 @@ sub STEP_newt_full ($self, @args) {
     --renderer=JUnit
   );
 
-  my $cmd = join q{ ; },
+  my $log_file = "$root/test-results.jsonl.bz2";
+
+  my $setup = join q{ ; },
     qq{source /etc/fmhome/bashrc},
     qq{penv},
-    qq{cd /home/mod_perl/hm},
-    qq{$yath_env yath test $yath_opts --log-file $root/test-results @tests};
+    qq{cd /home/mod_perl/hm};
 
   $self->run_cmd(
-    "bash -c '$cmd'",
+    "bash -c '$setup ; $yath_env yath test $yath_opts --log-file $log_file @tests'",
     "yath",
     { on_fail => 'mark_failing' },
   );
+
+  START("summarizing yath results");
+
+  unless (-e $log_file) {
+    ERROR("yath did not produce a log file");
+    return;
+  }
+
+  $self->run_cmd(
+    "bash -c '$setup ; yath failed $log_file --brief | sort > $root/newt_failures'",
+    "yath failed",
+    { on_fail => 'ignore' },
+  );
+
+  my $replay = `bash -c '$setup ; yath replay $log_file 2>&1'`;
+  my ($file_count) = $replay =~ /File Count:\s*([0-9]+)/;
+
+  $self->run_data->{newt} = { file_count => $file_count };
+
+  return;
 }
 
 sub STEP_cassandane ($self, @args) {
@@ -468,10 +503,10 @@ sub STEP_cassandane ($self, @args) {
 
   $self->run_cmd($cmd, "cassandane", { on_fail => 'mark_failing' });
 
-  if (-e "/dev/shm/cass/failures") {
+  if (-e "/dev/shm/cass/failed") {
     $self->run_cmd(
-      "cp -r /dev/shm/cass/failures $root/cass_failures",
-      "cp cass_failures",
+      "cp /dev/shm/cass/failed $root/cass_failed",
+      "cp cass_failed",
     );
   }
 
@@ -495,6 +530,15 @@ sub STEP_log_gather ($self) {
 
   $self->run_cmd($cmd, 'lg', { on_fail => 'ignore' });
 
+  $self->write_events_file;
+
+  say "Gathered in $root:";
+  system "find", "$root", "-type", "f";
+}
+
+sub write_events_file ($self) {
+  my $root = $self->root;
+
   Path::Tiny::path("$root/events.json")->spew_utf8(
     JSON::XS->new->pretty->canonical->encode({
       $self->run_data->%*,
@@ -502,8 +546,7 @@ sub STEP_log_gather ($self) {
     }),
   );
 
-  say "Gathered in $root:";
-  system "find", "$root", "-type", "f";
+  return;
 }
 
 package main;
@@ -525,7 +568,19 @@ for my $instruction (@instructions) {
     die "Test runner has no implementation for $name step\n";
   }
 
-  $testproc->$method(@args);
+  my $ok = eval { $testproc->$method(@args); 1 };
+
+  unless ($ok) {
+    my $error = $@ || "(unknown error)";
+
+    # A step that dies skips log_gather, which is where events.json is
+    # normally written.  The CI report relies on that file.  Write it now,
+    # noting what killed us, then go ahead and die already.
+    $testproc->run_data->{fatal_error} = { step => $name, error => "$error" };
+    eval { $testproc->write_events_file };
+
+    die $error;
+  }
 }
 
 FINISH_CURR();

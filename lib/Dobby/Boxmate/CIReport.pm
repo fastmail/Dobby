@@ -328,6 +328,9 @@ sub _run_facts ($self) {
     hm_head_url   => ($hm_head && $ci->{project_url})
                    ? "$ci->{project_url}/-/commit/$hm_head"
                    : undef,
+    artifacts_url => ($ci->{job_url} && -d $self->run_dir)
+                   ? "$ci->{job_url}/artifacts/browse/" . $self->run_dir->basename . "/"
+                   : undef,
     ref           => $ci->{ref},
     when          => $when,
   };
@@ -391,8 +394,9 @@ sub text ($self) {
     $text .= "\n";
   }
 
-  $text .= "Job: $ci->{job_url}\n"           if $ci->{job_url};
-  $text .= "Pipeline: $ci->{pipeline_url}\n" if $ci->{pipeline_url};
+  $text .= "Job: $ci->{job_url}\n"              if $ci->{job_url};
+  $text .= "Artifacts: $facts->{artifacts_url}\n" if $facts->{artifacts_url};
+  $text .= "Pipeline: $ci->{pipeline_url}\n"    if $ci->{pipeline_url};
 
   return $text;
 }
@@ -453,8 +457,11 @@ sub html ($self) {
     $html .= "</ul>\n\n";
   }
 
-  if ($ci->{job_url}) {
-    $html .= sprintf "<p>See <a href='%s'>the CI job</a> for logs and artifacts.</p>\n\n",
+  if ($facts->{artifacts_url}) {
+    $html .= sprintf "<p>See <a href='%s'>the CI job</a> for logs, and <a href='%s'>its artifacts</a> for everything the box produced.</p>\n\n",
+      _h($ci->{job_url}), _h($facts->{artifacts_url});
+  } elsif ($ci->{job_url}) {
+    $html .= sprintf "<p>See <a href='%s'>the CI job</a> for logs.</p>\n\n",
       _h($ci->{job_url});
   }
 

@@ -52,6 +52,7 @@ my sub report_for ($arg) {
     plan    => $plan,
     run_dir => $run_dir,
     status  => $arg->{status},
+    ci_info => $arg->{ci_info} // {},
   });
 
   # Keep the tempdir alive as long as the report is.
@@ -298,6 +299,39 @@ report_ok(
     outcome => 'trouble',
     trouble => [ "The CI job failed, but no failures were found in its results." ],
   },
+);
+
+sub artifacts_link_ok ($desc, $arg, $expect) {
+  local $Test::Builder::Level = $Test::Builder::Level + 1;
+
+  my ($report, $root) = report_for({
+    suites  => [],
+    status  => 'pass',
+    ci_info => { job_url => 'https://gitlab.example.com/hm/-/jobs/1' },
+    %$arg,
+  });
+
+  subtest $desc => sub {
+    if (defined $expect) {
+      like($report->text, qr/^Artifacts: \Q$expect\E$/m, "text links to artifacts");
+      like($report->html, qr/href='\Q$expect\E'/, "html links to artifacts");
+    } else {
+      unlike($report->text, qr/^Artifacts:/m, "text has no artifacts link");
+      unlike($report->html, qr/artifacts\/browse/, "html has no artifacts link");
+    }
+  };
+}
+
+artifacts_link_ok(
+  "we link to the run directory in the job's artifacts",
+  { events => \%passing_events, files => {} },
+  'https://gitlab.example.com/hm/-/jobs/1/artifacts/browse/run-1/',
+);
+
+artifacts_link_ok(
+  "no artifacts were retrieved, so there's nothing to link to",
+  {},
+  undef,
 );
 
 done_testing;

@@ -176,7 +176,7 @@ sub _cassandane_suite ($self) {
   }
 
   my $ok_count = grep {; /^\[\s*OK\s*\]/ } @$log;
-  my $failures = $self->_lines_of('cass_failures') // [];
+  my $failures = $self->_lines_of('cass_failed') // [];
 
   $suite{total} = $ok_count + @$failures;
 

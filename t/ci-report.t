@@ -155,7 +155,7 @@ report_ok(
     files  => {
       newt_failures    => [ 't/alpha.t', 't/beta.t' ],
       'cassandane.log' => [ @cass_ok_log, '[FAILED] Cyrus::Foo.boom' ],
-      cass_failures    => [ 'Cyrus::Foo.boom' ],
+      cass_failed      => [ 'Cyrus::Foo.boom' ],
     },
   },
   {

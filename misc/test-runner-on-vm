@@ -496,10 +496,10 @@ sub STEP_cassandane ($self, @args) {
 
   $self->run_cmd($cmd, "cassandane", { on_fail => 'mark_failing' });
 
-  if (-e "/dev/shm/cass/failures") {
+  if (-e "/dev/shm/cass/failed") {
     $self->run_cmd(
-      "cp -r /dev/shm/cass/failures $root/cass_failures",
-      "cp cass_failures",
+      "cp /dev/shm/cass/failed $root/cass_failed",
+      "cp cass_failed",
     );
   }
 

@@ -176,13 +176,23 @@ sub _cassandane_suite ($self) {
   }
 
   my $ok_count = grep {; /^\[\s*OK\s*\]/ } @$log;
-  my $failures = $self->_lines_of('cass_failed') // [];
+  my $failures = $self->_lines_of('cass_failed');
+  my $exited_badly = _event_failed($self->_last_event_for('cassandane'));
 
-  $suite{total} = $ok_count + @$failures;
+  $suite{total} = $ok_count + ($failures ? @$failures : 0);
 
-  return { %suite, state => 'failed', failures => $failures } if @$failures;
+  return { %suite, state => 'failed', failures => $failures }
+    if $failures && @$failures;
 
-  if (_event_failed($self->_last_event_for('cassandane')) or ! $ok_count) {
+  if ($exited_badly and ! $failures) {
+    return {
+      %suite,
+      state => 'broken',
+      why   => "The test run failed, but left no list of failed tests (cass_failed).",
+    };
+  }
+
+  if ($exited_badly or ! $ok_count) {
     return {
       %suite,
       state => 'broken',

@@ -288,6 +288,34 @@ report_ok(
 );
 
 report_ok(
+  "cassandane failed, but left no cass_failed file",
+  {
+    suites => [ qw( cass ) ],
+    status => 'fail',
+    events => { %passing_events, events => [ failed_event('cassandane', 1, 'mark_failing') ] },
+    files  => { 'cassandane.log' => \@cass_ok_log },
+  },
+  {
+    outcome => 'trouble',
+    suites  => { Cassandane => superhashof({ state => 'broken', why => re(qr/no list of failed tests/) }) },
+  },
+);
+
+report_ok(
+  "cassandane failed, but its cass_failed file was empty",
+  {
+    suites => [ qw( cass ) ],
+    status => 'fail',
+    events => { %passing_events, events => [ failed_event('cassandane', 1, 'mark_failing') ] },
+    files  => { 'cassandane.log' => \@cass_ok_log, cass_failed => [] },
+  },
+  {
+    outcome => 'trouble',
+    suites  => { Cassandane => superhashof({ state => 'broken', why => re(qr/no tests failed/) }) },
+  },
+);
+
+report_ok(
   "the job failed, but we found nothing wrong",
   {
     suites => [ qw( newt ) ],

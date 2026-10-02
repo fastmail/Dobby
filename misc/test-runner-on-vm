@@ -448,6 +448,13 @@ sub STEP_cassandane ($self, @args) {
   # Temp hack, don't let security get in the way of testing
   $self->run_cmd("sudo aa-disable /etc/apparmor.d/cyrus");
 
+  # Cassandane does IPv6 tests and needs IPv6 allowed
+  $self->run_cmd("ip6tables -P INPUT ACCEPT");
+  $self->run_cmd("ip6tables -P OUTPUT ACCEPT");
+
+  # Cassandane does core dump tests and needs this to find the dump files
+  $self->run_cmd("sysctl kernel.core_pattern=core.%p");
+
   my $cmd = join q{ && },
     qq{set -o pipefail},
     qq{set -x},
@@ -455,15 +462,22 @@ sub STEP_cassandane ($self, @args) {
     qq{fmdev cass --allow-root --working-dir $cass_workdir 2>&1 | tee $root/fmdev-cass.log},
     qq{cd cyrus-imapd/cassandane},
     qq{chown cyrus .},
-    qq{sudo -u cyrus env PERL5LIB=/home/mod_perl/hm:\$PERL5LIB ./testrunner.pl --config $cass_workdir/cassandane.ini $cass_args 2>&1 | tee $root/cassandane.log};
+    qq{sudo -u cyrus env PERL5LIB=/home/mod_perl/hm:\$PERL5LIB ./testrunner.pl --jobs 6 --config $cass_workdir/cassandane.ini $cass_args 2>&1 | tee $root/cassandane.log};
 
   $cmd = "bash -c '$cmd'";
 
   $self->run_cmd($cmd, "cassandane", { on_fail => 'mark_failing' });
 
+  if (-e "/dev/shm/cass/failures") {
+    $self->run_cmd(
+      "cp -r /dev/shm/cass/failures $root/cass_failures",
+      "cp cass_failures",
+    );
+  }
+
   $self->run_cmd(
-    "cp -r $cass_workdir/cyrus-imapd/cassandane/reports $root/cass_reports",
-    "cp reports",
+    "cp -r /dev/shm/cass/reports $root/cass_reports",
+    "cp cass_reports",
   );
 
   return;

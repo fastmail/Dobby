@@ -173,6 +173,10 @@ sub STEP_boot_up ($self) {
   $self->run_data->{box_version} = $box_version;
   say "Building on fminabox.version $box_version";
 
+  my $cyrus_version = $self->_installed_cyrus_version;
+  $self->run_data->{cyrus_version} = $cyrus_version;
+  say "Starting with Cyrus $cyrus_version";
+
   $self->run_cmd(
     "ssh-keyscan box-fastmail-01 box-fastmail-01.internal >> ~/.ssh/known_hosts",
     "generating known hosts",
@@ -240,10 +244,13 @@ sub STEP_install_cyrus ($self, $version) {
   );
 
   START("checking Cyrus version");
-  my $reported_version = `fmcyrpkg versions | grep fm | head -n1 | awk '{printf \$2}'`;
-  chomp $reported_version;
+  $self->run_data->{cyrus_version} = $self->_installed_cyrus_version;
+}
 
-  $self->run_data->{cyrus_version} = $reported_version;
+sub _installed_cyrus_version ($self) {
+  my $version = `fmcyrpkg versions | grep fm | head -n1 | awk '{printf \$2}'`;
+  chomp $version;
+  return $version;
 }
 
 sub STEP_debian_upgrade ($self) {

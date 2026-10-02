@@ -7,6 +7,7 @@ use v5.36.0;
 use utf8;
 
 use JSON::XS ();
+use List::Util ();
 use Path::Tiny ();
 
 =head1 OVERVIEW
@@ -414,7 +415,7 @@ sub text ($self) {
   }
 
   my @rows  = $self->_about_rows;
-  my ($width) = sort {; $b <=> $a } map {; length $_->{label} } @rows;
+  my $width = List::Util::max(map {; length $_->{label} } @rows);
 
   for my $row (@rows) {
     $text .= sprintf "  %-*s %s\n", $width + 1, "$row->{label}:",

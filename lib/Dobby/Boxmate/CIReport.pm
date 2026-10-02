@@ -331,7 +331,7 @@ sub _about_rows ($self) {
 
   my $hm_head = $events->{hm_head};
   my $cyrus   = $events->{cyrus_version};
-  undef $cyrus unless defined $cyrus && length $cyrus;
+  undef $cyrus unless length $cyrus;
 
   require DateTime;
   my $when = DateTime->from_epoch(

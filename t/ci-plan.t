@@ -15,6 +15,9 @@ my $CMD = 'Dobby::Boxmate::App::Command::ciplan';
 # running the tests happens to have exported.
 my @CI_ENV = qw(
   ME_TEST_SLOW
+  FM_CI_NEWT
+  FM_CI_CASSANDANE
+  FM_CI_CYRUS
   CI_MERGE_REQUEST_SOURCE_PROJECT_PATH
   CI_MERGE_REQUEST_SOURCE_BRANCH_NAME
 );
@@ -25,7 +28,7 @@ my @CI_ENV = qw(
 my sub program_for ($env, $argv) {
   local @ENV{ @CI_ENV };
   delete @ENV{ @CI_ENV };
-  $ENV{ME_TEST_SLOW} = $env if defined $env;
+  $ENV{$_} = $env->{$_} for keys %$env;
 
   local @ARGV = @$argv;
   my ($opt, undef) = describe_options('%c %o', $CMD->opt_spec);
@@ -41,7 +44,10 @@ my sub step_named ($program, $name) {
 sub newt_args_ok ($env, $argv, $expect, $desc) {
   local $Test::Builder::Level = $Test::Builder::Level + 1;
 
-  my $step = step_named(program_for($env, $argv), 'newt_full');
+  my $step = step_named(
+    program_for({ defined $env ? (ME_TEST_SLOW => $env) : () }, $argv),
+    'newt_full',
+  );
 
   cmp_deeply(
     [ @{$step}[ 1 .. $#$step ] ],
@@ -67,9 +73,31 @@ newt_args_ok('', [], [],
 newt_args_ok(0, ['--include-slow-tests'], ['slow'],
   'an explicit switch beats a false ME_TEST_SLOW');
 
+sub newt_planned_ok ($env, $argv, $expect, $desc) {
+  local $Test::Builder::Level = $Test::Builder::Level + 1;
+
+  my $step = step_named(program_for($env, $argv), 'newt_full');
+  is(!! $step, !! $expect, $desc);
+}
+
+newt_planned_ok({}, [], 1, 'newt runs by default');
+
+newt_planned_ok({}, ['--no-newt'], 0, '--no-newt turns it off');
+
+newt_planned_ok({ FM_CI_NEWT => 0 }, [], 0, 'so does FM_CI_NEWT=0');
+
+newt_planned_ok({ FM_CI_NEWT => 0 }, ['--newt'], 1,
+  'an explicit --newt beats a false FM_CI_NEWT');
+
+newt_planned_ok({ FM_CI_NEWT => 1 }, ['--no-newt'], 0,
+  'an explicit --no-newt beats a true FM_CI_NEWT');
+
+newt_planned_ok({ FM_CI_CASSANDANE => 0 }, [], 1,
+  'FM_CI_CASSANDANE has nothing to do with newt');
+
 subtest 'asking for slow tests changes nothing but the newt_full step' => sub {
-  my $without = program_for(undef, []);
-  my $with    = program_for(undef, ['--include-slow-tests']);
+  my $without = program_for({}, []);
+  my $with    = program_for({}, ['--include-slow-tests']);
 
   cmp_deeply(
     [ map {; $_->[0] } @$with ],
@@ -99,7 +127,7 @@ subtest 'every step in the template is one the runner implements' => sub {
 
   ok(keys %implemented, 'we found step implementations to check against');
 
-  for my $step (program_for(undef, ['--include-slow-tests'])->@*) {
+  for my $step (program_for({}, ['--include-slow-tests'])->@*) {
     ok($implemented{ $step->[0] }, "the runner implements the $step->[0] step");
   }
 };

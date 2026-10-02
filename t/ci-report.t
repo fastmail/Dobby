@@ -362,4 +362,47 @@ artifacts_link_ok(
   undef,
 );
 
+sub version_links_ok ($desc, $events, $expect) {
+  local $Test::Builder::Level = $Test::Builder::Level + 1;
+
+  my ($report, $root) = report_for({
+    suites => [],
+    status => 'pass',
+    events => { %passing_events, %$events },
+    files  => {},
+  });
+
+  my $html = $report->html;
+
+  subtest $desc => sub {
+    for my $url ($expect->{links}->@*) {
+      like($html, qr/href='\Q$url\E'/, "links to $url");
+    }
+
+    for my $re (($expect->{no_links} // [])->@*) {
+      unlike($html, $re, "no link matching $re");
+    }
+  };
+}
+
+version_links_ok(
+  "hm and cyrus versions link to gitlab",
+  { hm_head => '0123456789abcdef', cyrus_version => 'fmci-20261002.001-gcf1ffd80' },
+  {
+    links => [
+      'https://gitlab.fm/fastmail/hm/-/commit/0123456789abcdef',
+      'https://gitlab.fm/fastmail/cyrus-imapd/-/tags/fmci-20261002.001-gcf1ffd80',
+    ],
+  },
+);
+
+version_links_ok(
+  "an unknown cyrus version isn't linked",
+  { hm_head => '0123456789abcdef', cyrus_version => '' },
+  {
+    links    => [ 'https://gitlab.fm/fastmail/hm/-/commit/0123456789abcdef' ],
+    no_links => [ qr{cyrus-imapd} ],
+  },
+);
+
 done_testing;

@@ -49,7 +49,6 @@ sub _ci_info ($self) {
   my %info = (
     job_url      => $ENV{CI_JOB_URL},
     pipeline_url => $ENV{CI_PIPELINE_URL},
-    project_url  => $ENV{CI_PROJECT_URL},
     ref          => $ENV{CI_COMMIT_REF_NAME},
   );
 

@@ -51,7 +51,7 @@ has status => (
 );
 
 # Information about the CI job, used to link back to it.  All optional.  Keys
-# are job_url, pipeline_url, project_url, and ref.
+# are job_url, pipeline_url, and ref.
 has ci_info => (
   is      => 'ro',
   isa     => 'HashRef',
@@ -319,11 +319,19 @@ sub subject ($self, $tag = undef) {
   return join q{ }, $SUBJECT{ $self->outcome }, (defined $tag ? $tag : ());
 }
 
-sub _run_facts ($self) {
+my $GITLAB = 'https://gitlab.fm';
+
+# These are shown at the top of the report, as a little table of what was
+# tested.  Each row has a label and a value, and may have a url (to link the
+# value), a note (shown after the value, unlinked), and a true code (to show
+# the value in monospace, in HTML).  An unknown value is undef.
+sub _about_rows ($self) {
   my $events = $self->events // {};
   my $ci     = $self->ci_info;
 
   my $hm_head = $events->{hm_head};
+  my $cyrus   = $events->{cyrus_version};
+  undef $cyrus unless defined $cyrus && length $cyrus;
 
   require DateTime;
   my $when = DateTime->from_epoch(
@@ -331,19 +339,41 @@ sub _run_facts ($self) {
     time_zone => 'America/New_York',
   )->format_cldr('cccc, MMM d, yyyy');
 
-  return {
-    box_version   => $events->{box_version}   // 'unknown',
-    cyrus_version => $events->{cyrus_version} // 'unknown',
-    hm_head       => defined $hm_head ? substr($hm_head, 0, 12) : 'unknown',
-    hm_head_url   => ($hm_head && $ci->{project_url})
-                   ? "$ci->{project_url}/-/commit/$hm_head"
-                   : undef,
-    artifacts_url => ($ci->{job_url} && -d $self->run_dir)
-                   ? "$ci->{job_url}/artifacts/browse/" . $self->run_dir->basename . "/"
-                   : undef,
-    ref           => $ci->{ref},
-    when          => $when,
-  };
+  my $us_flag = "\N{REGIONAL INDICATOR SYMBOL LETTER U}"
+              . "\N{REGIONAL INDICATOR SYMBOL LETTER S}";
+
+  return (
+    {
+      label => 'box version',
+      value => $events->{box_version},
+      code  => 1,
+    },
+    {
+      label => 'hm version',
+      value => defined $hm_head ? substr($hm_head, 0, 12) : undef,
+      url   => defined $hm_head ? "$GITLAB/fastmail/hm/-/commit/$hm_head" : undef,
+      note  => defined $ci->{ref} ? "($ci->{ref})" : undef,
+      code  => 1,
+    },
+    {
+      label => 'cyrus version',
+      value => $cyrus,
+      url   => defined $cyrus ? "$GITLAB/fastmail/cyrus-imapd/-/tags/$cyrus" : undef,
+      code  => 1,
+    },
+    {
+      label => 'report generated',
+      value => $when,
+      note  => $us_flag,
+    },
+  );
+}
+
+sub _artifacts_url ($self) {
+  my $job_url = $self->ci_info->{job_url};
+  return undef unless $job_url && -d $self->run_dir;
+
+  return "$job_url/artifacts/browse/" . $self->run_dir->basename . "/";
 }
 
 sub _suite_heading ($suite) {
@@ -374,22 +404,24 @@ This returns the report as plain text.
 =cut
 
 sub text ($self) {
-  my $facts = $self->_run_facts;
-  my $ci    = $self->ci_info;
+  my $ci = $self->ci_info;
 
-  my $text = "Test Results\n============\n\n";
-
-  $text .= "Results for box version $facts->{box_version}, "
-        .  "hm commit $facts->{hm_head}"
-        .  (defined $facts->{ref} ? " ($facts->{ref})" : "")
-        .  ", using Cyrus $facts->{cyrus_version}, produced $facts->{when}.\n\n";
-
-  $text .= "$HEADLINE{ $self->outcome }\n\n";
+  my $text = "$HEADLINE{ $self->outcome }\n\n";
 
   if (my @trouble = $self->trouble) {
     $text .= "  * $_\n" for @trouble;
     $text .= "\n";
   }
+
+  my @rows  = $self->_about_rows;
+  my ($width) = sort {; $b <=> $a } map {; length $_->{label} } @rows;
+
+  for my $row (@rows) {
+    $text .= sprintf "  %-*s %s\n", $width + 1, "$row->{label}:",
+      join q{ }, $row->{value} // 'unknown', (defined $row->{note} ? $row->{note} : ());
+  }
+
+  $text .= "\n";
 
   for my $suite ($self->suites->@*) {
     $text .= _suite_heading($suite) . "\n";
@@ -404,9 +436,11 @@ sub text ($self) {
     $text .= "\n";
   }
 
-  $text .= "Job: $ci->{job_url}\n"              if $ci->{job_url};
-  $text .= "Artifacts: $facts->{artifacts_url}\n" if $facts->{artifacts_url};
-  $text .= "Pipeline: $ci->{pipeline_url}\n"    if $ci->{pipeline_url};
+  my $artifacts_url = $self->_artifacts_url;
+
+  $text .= "Job: $ci->{job_url}\n"          if $ci->{job_url};
+  $text .= "Artifacts: $artifacts_url\n"    if $artifacts_url;
+  $text .= "Pipeline: $ci->{pipeline_url}\n" if $ci->{pipeline_url};
 
   return $text;
 }
@@ -417,43 +451,65 @@ This returns the report as an HTML fragment.
 
 =cut
 
+# The HTML is for mail clients, so all styling is inline, and we avoid solid
+# background colors, which fight with dark mode.
+my %COLOR = (
+  success => { fg => '#16a34a', tint => 'rgba(22, 163, 74, 0.10)'  },
+  failure => { fg => '#dc2626', tint => 'rgba(220, 38, 38, 0.10)'  },
+  trouble => { fg => '#d97706', tint => 'rgba(217, 119, 6, 0.12)'  },
+);
+
+my $MUTED = 'color: #6b7280';
+my $MONO  = q{font-family: SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 13px};
+
 sub html ($self) {
-  my $facts = $self->_run_facts;
   my $ci    = $self->ci_info;
+  my $color = $COLOR{ $self->outcome };
 
-  my $commit = $facts->{hm_head_url}
-             ? sprintf("<a href='%s'>%s</a>", _h($facts->{hm_head_url}), _h($facts->{hm_head}))
-             : _h($facts->{hm_head});
+  my $html = "<div style='max-width: 40em'>\n";
 
-  my $html = "<h1>Test Results</h1>\n\n";
-
-  $html .= "<p>Results for box version " . _h($facts->{box_version})
-        .  ", hm commit $commit"
-        .  (defined $facts->{ref} ? " (" . _h($facts->{ref}) . ")" : "")
-        .  ", using Cyrus " . _h($facts->{cyrus_version})
-        .  ", produced " . _h($facts->{when}) . ".</p>\n\n";
-
-  $html .= "<h2>$HEADLINE{ $self->outcome }</h2>\n\n";
+  $html .= "<div style='margin: 0 0 16px; padding: 10px 14px; border-left: 4px solid $color->{fg}; "
+        .  "border-radius: 4px; background: $color->{tint}'>\n"
+        .  "<div style='font-size: 20px; font-weight: 600; color: $color->{fg}'>"
+        .  _h($HEADLINE{ $self->outcome }) . "</div>\n";
 
   if (my @trouble = $self->trouble) {
-    $html .= "<ul>\n";
+    $html .= "<ul style='margin: 6px 0 0; padding-left: 20px'>\n";
     $html .= "<li>" . _h($_) . "</li>\n" for @trouble;
-    $html .= "</ul>\n\n";
+    $html .= "</ul>\n";
   }
+
+  $html .= "</div>\n\n";
+
+  $html .= "<table style='border-collapse: collapse; font-size: 13px; margin-bottom: 8px'>\n";
+
+  for my $row ($self->_about_rows) {
+    my $value = ! defined $row->{value} ? "<span style='$MUTED'>unknown</span>"
+              : defined $row->{url}     ? sprintf("<a href='%s'>%s</a>", _h($row->{url}), _h($row->{value}))
+              :                           _h($row->{value});
+
+    $value = "<span style='$MONO'>$value</span>" if $row->{code} && defined $row->{value};
+    $value .= " " . _h($row->{note}) if defined $row->{note};
+
+    $html .= "<tr><td style='padding: 1px 16px 1px 0; $MUTED'>" . _h($row->{label})
+          .  "</td><td style='padding: 1px 0'>$value</td></tr>\n";
+  }
+
+  $html .= "</table>\n\n";
 
   for my $suite ($self->suites->@*) {
     my $heading = _h(_suite_heading($suite));
 
     if ($suite->{state} eq 'not-run') {
-      $html .= "<p><small>$heading</small></p>\n\n";
+      $html .= "<p style='font-size: 13px; $MUTED'>$heading</p>\n\n";
       next;
     }
 
-    $html .= "<h3>$heading</h3>\n";
-    $html .= "<p>" . _h($suite->{why}) . "</p>\n" if $suite->{why};
+    $html .= "<div style='margin-top: 20px; font-size: 16px; font-weight: 600'>$heading</div>\n";
+    $html .= "<div style='margin-top: 4px; $MUTED'>" . _h($suite->{why}) . "</div>\n" if $suite->{why};
 
     if (my @failures = ($suite->{failures} // [])->@*) {
-      $html .= "<ul>\n";
+      $html .= "<ul style='margin: 6px 0 0; padding-left: 24px; line-height: 1.6; $MONO'>\n";
       $html .= "<li>" . _h($_) . "</li>\n" for @failures;
       $html .= "</ul>\n";
     }
@@ -462,20 +518,25 @@ sub html ($self) {
   }
 
   if (my @failed = $self->failed_steps->@*) {
-    $html .= "<h3>These steps failed:</h3>\n<ul>\n";
-    $html .= "<li>" . _h("$_->{slug}: $_->{result}") . "</li>\n" for @failed;
+    $html .= "<div style='margin-top: 20px; font-size: 16px; font-weight: 600'>These steps failed:</div>\n";
+    $html .= "<ul style='margin: 6px 0 0; padding-left: 24px; line-height: 1.6'>\n";
+    $html .= "<li><span style='$MONO'>" . _h($_->{slug}) . "</span>: " . _h($_->{result}) . "</li>\n"
+      for @failed;
     $html .= "</ul>\n\n";
   }
 
-  if ($facts->{artifacts_url}) {
-    $html .= sprintf "<p>See <a href='%s'>the CI job</a> for logs, and <a href='%s'>its artifacts</a> for everything the box produced.</p>\n\n",
-      _h($ci->{job_url}), _h($facts->{artifacts_url});
+  $html .= "<div style='margin-top: 28px; padding-top: 10px; border-top: 1px solid rgba(128, 128, 128, 0.3); "
+        .  "font-size: 13px; $MUTED'>\n";
+
+  if (my $artifacts_url = $self->_artifacts_url) {
+    $html .= sprintf "See <a href='%s'>the CI job</a> for logs, and <a href='%s'>its artifacts</a> for everything the box produced.\n",
+      _h($ci->{job_url}), _h($artifacts_url);
   } elsif ($ci->{job_url}) {
-    $html .= sprintf "<p>See <a href='%s'>the CI job</a> for logs.</p>\n\n",
+    $html .= sprintf "See <a href='%s'>the CI job</a> for logs.\n",
       _h($ci->{job_url});
   }
 
-  $html .= "<div style='padding-top: 1em'><center>&#x1F48C;</center></div>\n";
+  $html .= "<span style='float: right'>&#x1F48C;</span>\n</div>\n</div>\n";
 
   return $html;
 }
